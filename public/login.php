@@ -42,7 +42,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             session_regenerate_id(true);
             $_SESSION['pre_uid'] = (int) $user['id'];
             $_SESSION['pre_at']  = time();
-            unset($_SESSION['enrol_secret']);
             redirect($user['totp_enabled'] ? '/2fa.php' : '/2fa-setup.php');
         }
     }

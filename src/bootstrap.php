@@ -416,8 +416,8 @@ function pending_user(): ?array
 {
     start_session();
     $uid = $_SESSION['pre_uid'] ?? null;
-    if (!$uid || time() - (int) ($_SESSION['pre_at'] ?? 0) > 300) {
-        unset($_SESSION['pre_uid'], $_SESSION['pre_at'], $_SESSION['enrol_secret']);
+    if (!$uid || time() - (int) ($_SESSION['pre_at'] ?? 0) > 900) {
+        unset($_SESSION['pre_uid'], $_SESSION['pre_at']);
         return null;
     }
     return find_user((int) $uid);

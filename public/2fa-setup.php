@@ -13,22 +13,30 @@ if ($user['totp_enabled']) {
     redirect('/2fa.php');
 }
 
-$_SESSION['enrol_secret'] ??= totp_new_secret();
-$secret = $_SESSION['enrol_secret'];
+// Le secret est gardé (chiffré) en base jusqu'à l'activation : le QR code reste le même
+// même si la personne se reconnecte, et celui déjà scanné continue de fonctionner.
+$secret = decrypt_secret($user['totp_secret']);
+if (!$secret) {
+    $secret = totp_new_secret();
+    db()->prepare('UPDATE users SET totp_secret = ? WHERE id = ? AND totp_enabled = 0')
+        ->execute([encrypt_secret($secret), $user['id']]);
+}
 $error = null;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
     $key = 'u' . $user['id'];
     if (too_many_attempts('2fa', $key, LOGIN_MAX_PER_USER)) {
-        unset($_SESSION['pre_uid'], $_SESSION['pre_at'], $_SESSION['enrol_secret']);
+        unset($_SESSION['pre_uid'], $_SESSION['pre_at']);
         flash('Trop de codes incorrects. Réessaie dans 15 minutes.');
         redirect('/login.php');
     }
     $step = totp_verify($secret, (string) ($_POST['code'] ?? ''));
     if ($step === null) {
         record_attempt('2fa', $key);
-        $error = 'Code incorrect. Vérifie que l\'heure de ton téléphone est automatique, puis réessaie.';
+        $error = 'Code incorrect. Utilise l\'entrée « ' . APP_NAME . ' » la plus récente de ton application '
+            . '(supprime les anciennes), vérifie que l\'heure du téléphone est automatique, puis réessaie. '
+            . 'Heure du serveur : ' . date('H:i:s') . '.';
     } else {
         db()->prepare('UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_last_step = ? WHERE id = ?')
             ->execute([encrypt_secret($secret), $step, $user['id']]);
@@ -60,6 +68,7 @@ auth_start('Activer la double authentification');
     </li>
     <li>
       <strong>Scanne ce QR code</strong>
+      <span class="muted">Si tu as déjà scanné un ancien QR code pour ce portail, supprime-le d'abord de ton application.</span>
       <div class="qr-wrap">
         <canvas class="qr" data-qr="<?= e($uri) ?>" width="220" height="220" aria-label="QR code à scanner"></canvas>
       </div>
