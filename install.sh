@@ -24,6 +24,66 @@ demander() { # demander "Question" "défaut" → réponse dans $REPONSE
   REPONSE="${REPONSE:-$def}"
 }
 
+# Écrit le VirtualHost du portail (port 80 ; le HTTPS est géré par le proxy ou par certbot).
+ecrire_vhost() {
+  local domaine="$1"
+  cat > "$CONF" <<EOF
+<VirtualHost *:80>
+    ServerName $domaine
+    ServerAlias www.$domaine
+    DocumentRoot $DIR/public
+    DirectoryIndex index.php
+
+    <Directory $DIR/public>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+        <LimitExcept GET POST>
+            Require all denied
+        </LimitExcept>
+    </Directory>
+
+    <FilesMatch "\.php\$">
+        SetHandler "proxy:unix:/run/php/php$PHPV-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    <DirectoryMatch "/\.(?!well-known)">
+        Require all denied
+    </DirectoryMatch>
+
+    <IfModule mod_headers.c>
+        Header always unset X-Powered-By
+        Header set X-Content-Type-Options "nosniff"
+        Header set X-Robots-Tag "noindex, nofollow"
+        Header setifempty Referrer-Policy "no-referrer"
+        Header setifempty X-Frame-Options "DENY"
+        Header setifempty Strict-Transport-Security "max-age=31536000"
+    </IfModule>
+
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresByType text/css "access plus 7 days"
+        ExpiresByType application/javascript "access plus 7 days"
+        ExpiresByType image/svg+xml "access plus 30 days"
+    </IfModule>
+
+    ErrorLog \${APACHE_LOG_DIR}/portail-liens_error.log
+    CustomLog \${APACHE_LOG_DIR}/portail-liens_access.log combined
+</VirtualHost>
+EOF
+}
+
+# Masque la version d'Apache et de Debian, désactive TRACE.
+durcir_apache() {
+  cat > /etc/apache2/conf-available/zz-portail-durcissement.conf <<'EOF'
+# Ajouté par le Portail de liens
+ServerTokens Prod
+ServerSignature Off
+TraceEnable Off
+EOF
+  a2enconf -q zz-portail-durcissement >/dev/null
+}
+
 # Tout le script est dans main() : bash le lit en entier avant de l'exécuter,
 # ce qui permet à la mise à jour de remplacer ce fichier sans danger.
 main() {
@@ -41,6 +101,11 @@ if [ -d "$DIR/.git" ] && [ -f "$CONF" ]; then
   chown -R www-data:www-data "$DIR/data"
   chmod 700 "$DIR/data"
   [ -f "$DIR/config.local.php" ] && chmod 640 "$DIR/config.local.php"
+  if [ ! -e /etc/apache2/sites-enabled/portail-liens-le-ssl.conf ]; then
+    ecrire_vhost "$(awk '/^[[:space:]]*ServerName/ {print $2; exit}' "$CONF")"
+  fi
+  durcir_apache
+  apache2ctl configtest
   systemctl reload "php$PHPV-fpm" apache2
   vert "✔ Portail mis à jour (version $(git -C "$DIR" log -1 --format='%h du %cd' --date=format:'%d/%m/%Y'))."
   exit 0
@@ -106,42 +171,8 @@ a2enmod -q mpm_event proxy_fcgi setenvif headers expires >/dev/null
 [ "$MODE" = "2" ] && a2enmod -q ssl rewrite >/dev/null
 systemctl enable --now "php$PHPV-fpm" >/dev/null
 
-cat > "$CONF" <<EOF
-<VirtualHost *:80>
-    ServerName $DOMAINE
-    ServerAlias www.$DOMAINE
-    DocumentRoot $DIR/public
-    DirectoryIndex index.php
-
-    <Directory $DIR/public>
-        Options -Indexes +FollowSymLinks
-        AllowOverride None
-        Require all granted
-    </Directory>
-
-    <FilesMatch "\.php\$">
-        SetHandler "proxy:unix:/run/php/php$PHPV-fpm.sock|fcgi://localhost"
-    </FilesMatch>
-
-    <DirectoryMatch "/\.(?!well-known)">
-        Require all denied
-    </DirectoryMatch>
-
-    <IfModule mod_headers.c>
-        Header always unset X-Powered-By
-    </IfModule>
-
-    <IfModule mod_expires.c>
-        ExpiresActive On
-        ExpiresByType text/css "access plus 7 days"
-        ExpiresByType application/javascript "access plus 7 days"
-        ExpiresByType image/svg+xml "access plus 30 days"
-    </IfModule>
-
-    ErrorLog \${APACHE_LOG_DIR}/portail-liens_error.log
-    CustomLog \${APACHE_LOG_DIR}/portail-liens_access.log combined
-</VirtualHost>
-EOF
+ecrire_vhost "$DOMAINE"
+durcir_apache
 a2dissite -q 000-default >/dev/null 2>&1 || true
 a2ensite -q portail-liens >/dev/null
 apache2ctl configtest

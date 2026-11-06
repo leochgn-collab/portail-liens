@@ -317,6 +317,9 @@ function log_event(?int $userId, string $event): void
 {
     db()->prepare('INSERT INTO journal (user_id, event, ip, at) VALUES (?, ?, ?, ?)')
         ->execute([$userId, $event, client_ip(), time()]);
+    if (random_int(1, 50) === 1) { // ménage : on garde 1 an de journal
+        db()->prepare('DELETE FROM journal WHERE at < ?')->execute([time() - 365 * 86400]);
+    }
 }
 
 // ─── Utilisateurs et authentification ──────────────────────────────────
