@@ -285,8 +285,10 @@ function csrf_field(): string
 
 function require_post_csrf(): void
 {
+    $attendu = (string) ($_SESSION['csrf'] ?? '');
+    $recu    = (string) ($_POST['csrf'] ?? '');
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'
-        || !hash_equals($_SESSION['csrf'] ?? '', (string) ($_POST['csrf'] ?? ''))) {
+        || strlen($attendu) !== 64 || !hash_equals($attendu, $recu)) {
         http_response_code(400);
         exit('Requête refusée (jeton expiré). Recharge la page et réessaie.');
     }
