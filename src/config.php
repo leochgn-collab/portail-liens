@@ -1,0 +1,37 @@
+<?php
+declare(strict_types=1);
+
+// ─── Réglages du portail ────────────────────────────────────────────────
+// Ne modifie pas ce fichier : il est remplacé à chaque mise à jour.
+// Mets tes réglages dans config.local.php (à la racine du portail), par exemple :
+//   <?php
+//   const APP_NAME = 'Leo44';
+//   const TRUSTED_PROXIES = '192.168.1.104';
+
+$local = dirname(__DIR__) . '/config.local.php';
+if (is_file($local)) {
+    require $local;
+}
+
+// Nom affiché en haut du tableau de bord et dans l'application d'authentification.
+defined('APP_NAME')     || define('APP_NAME', 'Mon Portail');
+defined('APP_SUBTITLE') || define('APP_SUBTITLE', 'Portail de liens');
+
+// Adresse(s) IP du reverse proxy (Zoraxy, Nginx Proxy Manager…), séparées par des virgules.
+// Seules ces adresses peuvent transmettre l'IP réelle du visiteur et le HTTPS.
+// Laisser vide si Apache est exposé directement sur internet.
+defined('TRUSTED_PROXIES') || define('TRUSTED_PROXIES', '');
+
+// Durée de session : déconnexion après 30 min d'inactivité, 12 h au maximum.
+defined('SESSION_IDLE') || define('SESSION_IDLE', 1800);
+defined('SESSION_MAX')  || define('SESSION_MAX', 43200);
+
+// Anti-force brute : nombre d'essais ratés autorisés par fenêtre de 15 minutes.
+defined('LOGIN_WINDOW')       || define('LOGIN_WINDOW', 900);
+defined('LOGIN_MAX_PER_IP')   || define('LOGIN_MAX_PER_IP', 10);
+defined('LOGIN_MAX_PER_USER') || define('LOGIN_MAX_PER_USER', 5);
+
+// Vérification de l'état des liens (pastille verte/rouge sur le tableau de bord).
+defined('STATUS_CHECK')   || define('STATUS_CHECK', true);
+defined('STATUS_CACHE')   || define('STATUS_CACHE', 120); // secondes
+defined('STATUS_TIMEOUT') || define('STATUS_TIMEOUT', 4); // secondes par lien
