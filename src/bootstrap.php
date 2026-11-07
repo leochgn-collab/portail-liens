@@ -112,6 +112,15 @@ function migrate(PDO $pdo): void
         );
     SQL);
 
+    // Mise à jour : apparence choisie par chaque compte.
+    $ucols = array_column($pdo->query('PRAGMA table_info(users)')->fetchAll(), 'name');
+    if (!in_array('theme', $ucols, true)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'bleu'");
+    }
+    if (!in_array('fond', $ucols, true)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN fond TEXT NOT NULL DEFAULT 'anime'");
+    }
+
     // Mise à jour : type d'accès des liens (public / privé).
     $cols = array_column($pdo->query('PRAGMA table_info(links)')->fetchAll(), 'name');
     if (!in_array('kind', $cols, true)) {
@@ -338,6 +347,26 @@ function log_event(?int $userId, string $event): void
         ->execute([$userId, $event, client_ip(), time()]);
     if (random_int(1, 50) === 1) { // ménage : on garde 1 an de journal
         db()->prepare('DELETE FROM journal WHERE at < ?')->execute([time() - 365 * 86400]);
+    }
+}
+
+// ─── Apparence ─────────────────────────────────────────────────────────
+
+const THEMES = ['bleu' => 'Bleu', 'violet' => 'Violet', 'emeraude' => 'Émeraude', 'orange' => 'Orange', 'rose' => 'Rose', 'cyan' => 'Cyan'];
+const FONDS  = ['anime' => 'Animé', 'fixe' => 'Fixe', 'aucun' => 'Aucun'];
+
+/** Thème et fond à appliquer : ceux du compte, sinon ceux mémorisés sur cet appareil (page de connexion). */
+function appearance(?array $user = null): array
+{
+    $theme = $user['theme'] ?? ($_COOKIE['portail_theme'] ?? 'bleu');
+    $fond  = $user['fond'] ?? ($_COOKIE['portail_fond'] ?? 'anime');
+    return [isset(THEMES[$theme]) ? $theme : 'bleu', isset(FONDS[$fond]) ? $fond : 'anime'];
+}
+
+function remember_appearance(string $theme, string $fond): void
+{
+    foreach (['portail_theme' => $theme, 'portail_fond' => $fond] as $k => $v) {
+        setcookie($k, $v, ['expires' => time() + 365 * 86400, 'path' => '/', 'secure' => is_https(), 'httponly' => true, 'samesite' => 'Lax']);
     }
 }
 

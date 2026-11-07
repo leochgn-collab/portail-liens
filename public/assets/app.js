@@ -117,6 +117,16 @@
     });
   }
 
+  // ── Apparence : aperçu immédiat puis enregistrement ──
+  document.querySelectorAll('form[data-autosubmit]').forEach(function (f) {
+    f.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (t.name === 'theme') document.documentElement.setAttribute('data-theme', t.value);
+      if (t.name === 'fond') document.documentElement.setAttribute('data-fond', t.value);
+      f.submit();
+    });
+  });
+
   // ── État des services ──
   var box = document.getElementById('groups');
   var url = box && box.getAttribute('data-status');

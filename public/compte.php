@@ -10,6 +10,17 @@ unset($_SESSION['new_codes']);
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
     $action  = (string) ($_POST['action'] ?? '');
+
+    if ($action === 'appearance') {
+        $theme = (string) ($_POST['theme'] ?? '');
+        $fond  = (string) ($_POST['fond'] ?? '');
+        if (isset(THEMES[$theme], FONDS[$fond])) {
+            db()->prepare('UPDATE users SET theme = ?, fond = ? WHERE id = ?')->execute([$theme, $fond, $user['id']]);
+            remember_appearance($theme, $fond);
+            flash('Apparence enregistrée.');
+        }
+        redirect('/compte.php');
+    }
     $current = (string) ($_POST['current'] ?? '');
     $key = 'acct' . $user['id'];
 
@@ -110,6 +121,29 @@ page_start('Mon compte', $user, 'compte');
     <p class="muted small">Nouveau téléphone ? Demande à un administrateur de réinitialiser ta double authentification : tu la reconfigureras à la prochaine connexion.</p>
   </section>
 </div>
+
+<section class="panel">
+  <h2>Apparence</h2>
+  <form method="post" class="form" data-autosubmit>
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="appearance">
+    <div class="field"><span>Couleur</span>
+      <div class="swatches">
+        <?php foreach (THEMES as $k => $label): ?>
+          <label class="swatch sw-<?= e($k) ?>"><input type="radio" name="theme" value="<?= e($k) ?>" <?= $user['theme'] === $k ? 'checked' : '' ?>><span><?= e($label) ?></span></label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <div class="field"><span>Fond</span>
+      <div class="seg">
+        <?php foreach (FONDS as $k => $label): ?>
+          <label><input type="radio" name="fond" value="<?= e($k) ?>" <?= $user['fond'] === $k ? 'checked' : '' ?>><span><?= e($label) ?></span></label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <noscript><button class="btn btn-primary" type="submit">Enregistrer</button></noscript>
+  </form>
+</section>
 
 <section class="panel">
   <h2>Activité récente</h2>

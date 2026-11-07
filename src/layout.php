@@ -57,9 +57,10 @@ function page_start(string $title, array $user, string $active): void
         array_splice($nav, 1, 0, [['/admin.php', 'Administration', 'shield', 'admin']]);
     }
     $initial = strtoupper(mb_substr($user['username'], 0, 1));
+    [$theme, $fond] = appearance($user);
     ?>
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="<?= e($theme) ?>" data-fond="<?= e($fond) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -71,6 +72,7 @@ function page_start(string $title, array $user, string $active): void
 <link rel="stylesheet" href="<?= e(asset('style.css')) ?>">
 </head>
 <body class="app">
+<div class="bg-anim" aria-hidden="true"><i></i></div>
 <aside class="sidebar">
   <a class="brand" href="/">
     <span class="brand-mark"><?= icon('link') ?></span>
@@ -104,9 +106,10 @@ function page_start(string $title, array $user, string $active): void
 function auth_start(string $title): void
 {
     send_security_headers();
+    [$theme, $fond] = appearance();
     ?>
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="<?= e($theme) ?>" data-fond="<?= e($fond) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -118,7 +121,7 @@ function auth_start(string $title): void
 <link rel="stylesheet" href="<?= e(asset('style.css')) ?>">
 </head>
 <body class="auth">
-<div class="auth-bg" aria-hidden="true"></div>
+<div class="bg-anim" aria-hidden="true"><i></i></div>
 <main class="auth-wrap">
   <div class="auth-brand">
     <span class="brand-mark"><?= icon('link') ?></span>
