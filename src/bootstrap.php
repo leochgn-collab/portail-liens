@@ -12,6 +12,13 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('expose_php', '0');
 
+// Seules les méthodes GET, HEAD et POST sont utiles au portail : les autres (PUT, DELETE…) sont refusées.
+if (PHP_SAPI !== 'cli' && !in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD', 'POST'], true)) {
+    header('Allow: GET, HEAD, POST');
+    http_response_code(405);
+    exit('Méthode non autorisée.');
+}
+
 // ─── Base de données (SQLite, hors de la racine web) ───────────────────
 
 function db(): PDO
@@ -92,6 +99,16 @@ function migrate(PDO $pdo): void
             event   TEXT NOT NULL,
             ip      TEXT,
             at      INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS bans (
+            ip      TEXT PRIMARY KEY,
+            level   INTEGER NOT NULL,
+            until   INTEGER NOT NULL,
+            last_at INTEGER NOT NULL
         );
     SQL);
 
@@ -324,6 +341,196 @@ function log_event(?int $userId, string $event): void
     }
 }
 
+// ─── Réglages enregistrés en base (modifiables dans l'administration) ───
+
+function setting(string $key, string $default = ''): string
+{
+    $st = db()->prepare('SELECT value FROM settings WHERE key = ?');
+    $st->execute([$key]);
+    $v = $st->fetchColumn();
+    return $v === false ? $default : (string) $v;
+}
+
+function set_setting(string $key, string $value): void
+{
+    db()->prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        ->execute([$key, $value]);
+}
+
+// ─── Notifications ntfy ────────────────────────────────────────────────
+
+function ntfy_configured(): bool
+{
+    return setting('ntfy_url') !== '' && setting('ntfy_topic') !== '';
+}
+
+/** Envoie tout de suite une notification. Retourne null si c'est bon, sinon le message d'erreur. */
+function ntfy_send(string $title, string $message, int $priority = 3, array $tags = []): ?string
+{
+    if (!ntfy_configured()) {
+        return 'Serveur ntfy non configuré.';
+    }
+    $headers = ['Content-Type: application/json'];
+    $token = decrypt_secret(setting('ntfy_token')) ?? '';
+    if ($token !== '') {
+        $headers[] = str_contains($token, ':')
+            ? 'Authorization: Basic ' . base64_encode($token)   // identifiant:mot de passe
+            : 'Authorization: Bearer ' . $token;               // jeton d'accès tk_…
+    }
+    $ch = curl_init(rtrim(setting('ntfy_url'), '/') . '/');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode([
+            'topic'    => setting('ntfy_topic'),
+            'title'    => $title,
+            'message'  => $message,
+            'priority' => $priority,
+            'tags'     => $tags,
+        ], JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT        => 5,
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+    ]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err  = curl_error($ch);
+    if ($body === false) {
+        return 'Serveur injoignable : ' . $err;
+    }
+    if ($code === 401 || $code === 403) {
+        return "Accès refusé par ntfy (code $code) : vérifie le jeton ou les droits sur le sujet.";
+    }
+    return $code >= 200 && $code < 300 ? null : "Réponse inattendue de ntfy (code $code).";
+}
+
+/**
+ * Prépare une notification : elle part une fois la page envoyée au visiteur,
+ * pour ne pas ralentir la connexion.
+ */
+function notify(string $title, string $message, int $priority = 3, array $tags = []): void
+{
+    static $queue = null;
+    if (!ntfy_configured()) {
+        return;
+    }
+    if ($queue === null) {
+        $queue = new ArrayObject();
+        register_shutdown_function(static function () use (&$queue): void {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close(); // la session doit être enregistrée avant de libérer le visiteur
+            }
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+            foreach ($queue as $n) {
+                ntfy_send(...$n);
+            }
+        });
+    }
+    $queue[] = [$title, $message . "\nIP : " . client_ip() . ' · ' . date('d/m/Y H:i'), $priority, $tags];
+}
+
+// ─── Blocage progressif des adresses IP ────────────────────────────────
+
+function human_duration(int $s): string
+{
+    if ($s >= 86400) {
+        $n = (int) ceil($s / 86400);
+        return $n . ' jour' . ($n > 1 ? 's' : '');
+    }
+    if ($s >= 3600) {
+        $n = (int) ceil($s / 3600);
+        return $n . ' heure' . ($n > 1 ? 's' : '');
+    }
+    $n = max(1, (int) ceil($s / 60));
+    return $n . ' minute' . ($n > 1 ? 's' : '');
+}
+
+/** Secondes restantes si l'IP est bloquée, sinon 0. */
+function ip_ban_remaining(string $ip): int
+{
+    $st = db()->prepare('SELECT until FROM bans WHERE ip = ?');
+    $st->execute([$ip]);
+    return max(0, (int) $st->fetchColumn() - time());
+}
+
+/** Bloque l'IP, chaque fois plus longtemps (15 min, puis 1 h, puis 24 h). Retourne la durée. */
+function ban_ip(string $ip): int
+{
+    $now = time();
+    $st = db()->prepare('SELECT level, last_at FROM bans WHERE ip = ?');
+    $st->execute([$ip]);
+    $row = $st->fetch();
+    // On repart du premier niveau si l'IP n'a pas été bloquée depuis BAN_RESET secondes.
+    $level = $row && $now - (int) $row['last_at'] < BAN_RESET ? (int) $row['level'] + 1 : 1;
+    $steps = BAN_STEPS;
+    $duration = (int) $steps[min($level, count($steps)) - 1];
+    db()->prepare('INSERT INTO bans (ip, level, until, last_at) VALUES (?, ?, ?, ?)
+                   ON CONFLICT(ip) DO UPDATE SET level = excluded.level, until = excluded.until, last_at = excluded.last_at')
+        ->execute([$ip, $level, $now + $duration, $now]);
+    clear_attempts('ip', $ip);
+    log_event(null, 'Adresse IP bloquée ' . human_duration($duration) . " (blocage n°$level)");
+    notify('IP bloquée ' . human_duration($duration), "Trop d'essais ratés sur le portail (blocage n°$level).",
+        $level >= 2 ? 5 : 4, ['no_entry']);
+    return $duration;
+}
+
+function unban_ip(string $ip): void
+{
+    db()->prepare('DELETE FROM bans WHERE ip = ?')->execute([$ip]);
+    clear_attempts('ip', $ip);
+}
+
+/** Arrête la page si l'IP du visiteur est bloquée. */
+function stop_if_banned(): void
+{
+    $left = ip_ban_remaining(client_ip());
+    if ($left > 0) {
+        http_response_code(429);
+        header('Retry-After: ' . $left);
+        exit('Trop de tentatives depuis ton adresse. Réessaie dans ' . human_duration($left) . '.');
+    }
+}
+
+/**
+ * Enregistre un essai raté (mot de passe ou code 2FA) : compteurs, ralentissement,
+ * blocage progressif de l'IP et alertes ntfy.
+ */
+function login_failed(string $kind, string $key, ?array $user, string $what): void
+{
+    $ip = client_ip();
+    record_attempt($kind, $key);
+    record_attempt('ip', $ip);
+    log_event($user ? (int) $user['id'] : null, $what);
+
+    $since = time() - LOGIN_WINDOW;
+    $st = db()->prepare('SELECT COUNT(*) FROM attempts WHERE kind = ? AND key = ? AND at >= ?');
+    $st->execute([$kind, $key, $since]);
+    $count = (int) $st->fetchColumn();
+
+    if ($user) {
+        $name = $user['username'];
+        if ($kind === '2fa' && $count === 1) {
+            notify("Code 2FA faux pour « $name »", 'Le mot de passe était correct, mais le code à 6 chiffres est faux. '
+                . "Si ce n'est pas toi, change ton mot de passe.", 4, ['warning']);
+        } elseif ($count === LOGIN_ALERT_AFTER) {
+            notify("$count essais ratés pour « $name »", $what . '.', 4, ['warning']);
+        }
+        if ($count === LOGIN_MAX_PER_USER) {
+            notify("Compte « $name » bloqué 15 min", 'Trop d\'essais ratés.', 4, ['lock']);
+        }
+    }
+
+    $st->execute(['ip', $ip, $since]);
+    if ((int) $st->fetchColumn() >= LOGIN_MAX_PER_IP) {
+        ban_ip($ip);
+    }
+
+    usleep(LOGIN_DELAY_MS * 1000); // ralentit les robots
+}
+
 // ─── Utilisateurs et authentification ──────────────────────────────────
 
 function password_algo(): string|int
@@ -405,6 +612,9 @@ function complete_login(array $user, string $to = '/', array $extra = []): never
     db()->prepare('UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?')
         ->execute([$created, client_ip(), $user['id']]);
     log_event((int) $user['id'], 'Connexion réussie');
+    if (setting('ntfy_notify_login', '1') === '1') {
+        notify("Connexion de « {$user['username']} »", 'Connexion réussie au portail.', 3, ['white_check_mark']);
+    }
     redirect($to);
 }
 

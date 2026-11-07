@@ -25,6 +25,7 @@ $error = null;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
+    stop_if_banned();
     $key = 'u' . $user['id'];
     if (too_many_attempts('2fa', $key, LOGIN_MAX_PER_USER)) {
         unset($_SESSION['pre_uid'], $_SESSION['pre_at']);
@@ -33,7 +34,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
     $step = totp_verify($secret, (string) ($_POST['code'] ?? ''));
     if ($step === null) {
-        record_attempt('2fa', $key);
+        login_failed('2fa', $key, $user, 'Code incorrect pendant l\'activation de la 2FA');
+        stop_if_banned();
         $error = 'Code incorrect. Utilise l\'entrée « ' . APP_NAME . ' » la plus récente de ton application '
             . '(supprime les anciennes), vérifie que l\'heure du téléphone est automatique, puis réessaie. '
             . 'Heure du serveur : ' . date('H:i:s') . '.';

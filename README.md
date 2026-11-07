@@ -12,6 +12,7 @@ Tableau de bord personnel en PHP pour regrouper ses liens (sites publics **et** 
 - **Catégories**, **recherche** instantanée (touche `/`) et filtres Tout / Publics / Privés / Notes.
 - **État des services** : pastille verte ou rouge pour chaque lien, vérifiée depuis le serveur.
 - **Administration** : liens, notes, catégories, comptes (mot de passe provisoire, réinitialisation 2FA, droits admin) et journal de sécurité.
+- **Alertes ntfy** sur le téléphone : connexion, essais ratés, code 2FA faux, adresse bloquée (onglet Administration → Sécurité).
 - **Thème sombre**, adapté au téléphone.
 
 | Double authentification | Administration | Mobile |
@@ -59,6 +60,8 @@ $P list                     # lister les comptes
 $P create-admin nom         # créer un administrateur
 $P reset-password nom       # nouveau mot de passe provisoire
 $P reset-2fa nom            # téléphone perdu : reconfigurer la 2FA
+$P bans                     # adresses IP bloquées
+$P unban 1.2.3.4            # débloquer une adresse (unban all : tout débloquer)
 ```
 
 ## Réglages
@@ -77,7 +80,10 @@ const TRUSTED_PROXIES = '192.168.1.104';
 
 - Mots de passe hachés en Argon2id, 12 caractères minimum.
 - Secret 2FA chiffré (libsodium), codes à usage unique, 8 codes de secours.
-- 5 erreurs par compte ou 10 par IP en 15 min : blocage temporaire.
+- 5 erreurs par compte en 15 min : compte bloqué 15 min.
+- 10 erreurs par IP en 15 min : adresse bloquée 15 min, puis 1 h, puis 24 h si elle recommence.
+- Chaque essai raté est ralenti d'une seconde.
+- Seules les méthodes GET et POST sont acceptées (PUT, DELETE… refusées).
 - Jeton CSRF sur chaque formulaire, cookies `Secure` / `HttpOnly` / `SameSite`, CSP stricte sans script en ligne.
 - Base SQLite et clé de chiffrement dans `data/`, **hors** du dossier publié par Apache.
 - Journal des connexions et actions sensibles.

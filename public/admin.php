@@ -3,7 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 $me  = require_admin();
-$tab = in_array($_GET['tab'] ?? '', ['liens', 'notes', 'categories', 'utilisateurs', 'journal'], true) ? $_GET['tab'] : 'liens';
+$tab = in_array($_GET['tab'] ?? '', ['liens', 'notes', 'categories', 'utilisateurs', 'securite', 'journal'], true) ? $_GET['tab'] : 'liens';
 $errors = [];
 
 function temp_password(): string
@@ -176,6 +176,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
             redirect('/admin.php?tab=utilisateurs');
 
+        case 'ntfy_save':
+            $tab   = 'securite';
+            $url   = rtrim(trim((string) ($_POST['ntfy_url'] ?? '')), '/');
+            $topic = trim((string) ($_POST['ntfy_topic'] ?? ''));
+            $token = trim((string) ($_POST['ntfy_token'] ?? ''));
+            if ($url !== '' && !valid_url($url)) {
+                $errors[] = 'Adresse du serveur ntfy invalide (ex. http://192.168.1.208:2586).';
+            }
+            if ($topic !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $topic)) {
+                $errors[] = 'Sujet invalide : lettres, chiffres, - et _ uniquement.';
+            }
+            if (!$errors) {
+                set_setting('ntfy_url', $url);
+                set_setting('ntfy_topic', $topic);
+                if (!empty($_POST['ntfy_token_clear'])) {
+                    set_setting('ntfy_token', '');
+                } elseif ($token !== '') {
+                    set_setting('ntfy_token', encrypt_secret($token));
+                }
+                set_setting('ntfy_notify_login', empty($_POST['ntfy_notify_login']) ? '0' : '1');
+                log_event((int) $me['id'], 'Réglages des notifications modifiés');
+                flash('Réglages des notifications enregistrés.');
+                redirect('/admin.php?tab=securite');
+            }
+            break;
+
+        case 'ntfy_test':
+            $err = ntfy_send('Test du portail', 'Les notifications de ' . APP_NAME . ' fonctionnent.', 3, ['tada']);
+            flash($err === null ? 'Notification de test envoyée : regarde ton téléphone.' : 'Échec : ' . $err);
+            redirect('/admin.php?tab=securite');
+
+        case 'unban':
+            $ip = (string) ($_POST['ip'] ?? '');
+            unban_ip($ip);
+            log_event((int) $me['id'], "Adresse IP $ip débloquée");
+            flash("Adresse $ip débloquée.");
+            redirect('/admin.php?tab=securite');
+
         case 'user_delete':
             $u = find_user($id);
             if ($u && $id !== (int) $me['id']) {
@@ -193,7 +231,7 @@ $tempPwd = $_SESSION['temp_pwd'] ?? null;
 unset($_SESSION['temp_pwd']);
 
 page_start('Administration', $me, 'admin');
-$tabs = ['liens' => 'Liens', 'notes' => 'Notes', 'categories' => 'Catégories', 'utilisateurs' => 'Utilisateurs', 'journal' => 'Journal'];
+$tabs = ['liens' => 'Liens', 'notes' => 'Notes', 'categories' => 'Catégories', 'utilisateurs' => 'Utilisateurs', 'securite' => 'Sécurité', 'journal' => 'Journal'];
 ?>
 <header class="topbar">
   <div>
@@ -471,6 +509,66 @@ $tabs = ['liens' => 'Liens', 'notes' => 'Notes', 'categories' => 'Catégories', 
         <?php endforeach; ?>
         </tbody>
       </table>
+    </section>
+  </div>
+
+<?php elseif ($tab === 'securite'):
+    $bans = db()->query('SELECT * FROM bans ORDER BY until DESC LIMIT 50')->fetchAll();
+    $hasToken = setting('ntfy_token') !== '';
+    $v = [
+        'url'   => $_POST['ntfy_url'] ?? setting('ntfy_url'),
+        'topic' => $_POST['ntfy_topic'] ?? setting('ntfy_topic'),
+    ];
+    ?>
+  <div class="cols cols-form">
+    <section class="panel">
+      <h2>Notifications ntfy</h2>
+      <p class="muted small">Reçois une alerte sur ton téléphone à chaque connexion, après plusieurs essais ratés, et quand une adresse est bloquée.</p>
+      <form method="post" class="form">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="ntfy_save">
+        <label class="field"><span>Adresse du serveur ntfy</span>
+          <input name="ntfy_url" value="<?= e($v['url']) ?>" placeholder="http://192.168.1.208:2586" maxlength="200" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Sujet (topic)</span>
+          <input name="ntfy_topic" value="<?= e($v['topic']) ?>" placeholder="portail-alertes" maxlength="64" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Jeton d'accès <span class="muted">(tk_… ou identifiant:mot de passe, facultatif)</span></span>
+          <input name="ntfy_token" type="password" placeholder="<?= $hasToken ? 'Enregistré · laisser vide pour le garder' : 'Aucun' ?>" maxlength="200" autocomplete="new-password"></label>
+        <?php if ($hasToken): ?><label class="check"><input type="checkbox" name="ntfy_token_clear" value="1"> Supprimer le jeton enregistré</label><?php endif; ?>
+        <label class="check"><input type="checkbox" name="ntfy_notify_login" value="1" <?= setting('ntfy_notify_login', '1') === '1' ? 'checked' : '' ?>> Me prévenir aussi des connexions réussies</label>
+        <div class="row">
+          <button class="btn btn-primary" type="submit">Enregistrer</button>
+        </div>
+      </form>
+      <?php if (ntfy_configured()): ?>
+      <form method="post" class="row">
+        <?= csrf_field() ?><input type="hidden" name="action" value="ntfy_test">
+        <button class="btn btn-ghost" type="submit">Envoyer une notification de test</button>
+      </form>
+      <?php endif; ?>
+    </section>
+    <section class="panel">
+      <h2>Adresses bloquées <span class="count"><?= count(array_filter($bans, fn($b) => (int) $b['until'] > time())) ?> en cours</span></h2>
+      <p class="muted small">Après <?= LOGIN_MAX_PER_IP ?> essais ratés en 15 min, une adresse est bloquée 15 min, puis 1 h, puis 24 h si elle recommence. Chaque essai raté est aussi ralenti d'une seconde.</p>
+      <?php if (!$bans): ?><p class="muted">Aucune adresse bloquée pour l'instant.</p><?php else: ?>
+      <table class="table">
+        <thead><tr><th>Adresse IP</th><th class="num">Blocages</th><th>Jusqu'à</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($bans as $b): $active = (int) $b['until'] > time(); ?>
+          <tr>
+            <td class="mono"><?= e($b['ip']) ?></td>
+            <td class="num"><?= (int) $b['level'] ?></td>
+            <td class="nowrap"><?= $active ? e(french_datetime((int) $b['until'])) : '<span class="muted">terminé</span>' ?></td>
+            <td class="actions">
+              <form method="post">
+                <?= csrf_field() ?><input type="hidden" name="action" value="unban"><input type="hidden" name="ip" value="<?= e($b['ip']) ?>">
+                <button class="btn btn-ghost btn-sm" type="submit"><?= $active ? 'Débloquer' : 'Oublier' ?></button>
+              </form>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php endif; ?>
     </section>
   </div>
 

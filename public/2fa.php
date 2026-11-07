@@ -17,9 +17,10 @@ $useRecovery = isset($_GET['secours']) || isset($_POST['recovery']);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
+    stop_if_banned();
     $key = 'u' . $user['id'];
 
-    if (too_many_attempts('2fa', $key, LOGIN_MAX_PER_USER) || too_many_attempts('ip', client_ip(), LOGIN_MAX_PER_IP)) {
+    if (too_many_attempts('2fa', $key, LOGIN_MAX_PER_USER)) {
         unset($_SESSION['pre_uid'], $_SESSION['pre_at']);
         log_event((int) $user['id'], 'Double authentification bloquée (trop d\'essais)');
         flash('Trop de codes incorrects. Réessaie dans 15 minutes.');
@@ -31,6 +32,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             clear_attempts('2fa', $key);
             clear_attempts('user', strtolower($user['username']));
             log_event((int) $user['id'], 'Connexion avec un code de secours');
+            notify("Code de secours utilisé par « {$user['username']} »",
+                'Un code de secours a servi à se connecter. Si ce n\'est pas toi, change ton mot de passe.', 4, ['key']);
             $left = remaining_recovery_codes((int) $user['id']);
             complete_login($user, $left <= 2 ? '/compte.php' : '/', [
                 'flash' => "Code de secours utilisé. Il t'en reste $left." . ($left <= 2 ? ' Génère-en de nouveaux.' : ''),
@@ -47,9 +50,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     }
 
-    record_attempt('2fa', $key);
-    record_attempt('ip', client_ip());
-    log_event((int) $user['id'], $useRecovery ? 'Code de secours incorrect' : 'Code 2FA incorrect');
+    login_failed('2fa', $key, $user, $useRecovery ? 'Code de secours incorrect' : 'Code 2FA incorrect');
+    stop_if_banned();
     $error = $useRecovery ? 'Code de secours invalide ou déjà utilisé.' : 'Code incorrect ou expiré.';
 }
 

@@ -6,6 +6,8 @@ declare(strict_types=1);
 //   runuser -u www-data -- php /var/www/portail-liens/bin/portail.php reset-password leo
 //   runuser -u www-data -- php /var/www/portail-liens/bin/portail.php reset-2fa leo
 //   runuser -u www-data -- php /var/www/portail-liens/bin/portail.php list
+//   runuser -u www-data -- php /var/www/portail-liens/bin/portail.php bans
+//   runuser -u www-data -- php /var/www/portail-liens/bin/portail.php unban 1.2.3.4   (ou : unban all)
 
 if (PHP_SAPI !== 'cli') {
     exit(1);
@@ -63,6 +65,7 @@ switch ($cmd) {
         db()->prepare('UPDATE users SET password_hash=?, must_change_pwd=1, pwd_version=pwd_version+1 WHERE id=?')
             ->execute([password_hash($tmp, password_algo()), $u['id']]);
         db()->prepare('DELETE FROM attempts')->execute();
+        db()->prepare('DELETE FROM bans')->execute();
         log_event((int) $u['id'], 'Mot de passe réinitialisé en console');
         echo "Nouveau mot de passe provisoire pour $name : $tmp\n";
         break;
@@ -83,7 +86,32 @@ switch ($cmd) {
         }
         break;
 
+    case 'bans':
+        $n = 0;
+        foreach (db()->query('SELECT * FROM bans WHERE until > ' . time() . ' ORDER BY until') as $b) {
+            printf("%-40s blocage n°%d jusqu'au %s\n", $b['ip'], $b['level'], date('d/m/Y H:i', (int) $b['until']));
+            $n++;
+        }
+        echo $n ? '' : "Aucune adresse bloquée.\n";
+        break;
+
+    case 'unban':
+        if ($name === 'all') {
+            db()->exec('DELETE FROM bans');
+            db()->exec("DELETE FROM attempts");
+            log_event(null, 'Toutes les adresses débloquées en console');
+            echo "Toutes les adresses et tous les comptes sont débloqués.\n";
+        } elseif (filter_var($name, FILTER_VALIDATE_IP)) {
+            unban_ip($name);
+            log_event(null, "Adresse IP $name débloquée en console");
+            echo "Adresse $name débloquée.\n";
+        } else {
+            fwrite(STDERR, "Indique une adresse IP, ou « all » pour tout débloquer.\n");
+            exit(1);
+        }
+        break;
+
     default:
-        echo "Usage : php bin/portail.php create-admin|reset-password|reset-2fa|list <identifiant>\n";
+        echo "Usage : php bin/portail.php create-admin|reset-password|reset-2fa|list|bans|unban <identifiant ou IP>\n";
         exit(1);
 }

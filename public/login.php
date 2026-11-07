@@ -12,14 +12,21 @@ $username = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
+    stop_if_banned();
     $username = trim((string) ($_POST['username'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
     $ip = client_ip();
     $userKey = strtolower($username);
 
-    if (too_many_attempts('ip', $ip, LOGIN_MAX_PER_IP) || too_many_attempts('user', $userKey, LOGIN_MAX_PER_USER)) {
-        $error = 'Trop de tentatives. Réessaie dans 15 minutes.';
+    if (too_many_attempts('user', $userKey, LOGIN_MAX_PER_USER)) {
+        $error = 'Trop de tentatives sur ce compte. Réessaie dans 15 minutes.';
         log_event(null, 'Connexion bloquée (trop d\'essais) pour « ' . mb_substr($username, 0, 40) . ' »');
+        // Insister sur un compte bloqué compte aussi pour le blocage de l'IP.
+        record_attempt('ip', $ip);
+        if (too_many_attempts('ip', $ip, LOGIN_MAX_PER_IP)) {
+            ban_ip($ip);
+        }
+        usleep(LOGIN_DELAY_MS * 1000);
     } else {
         $st = db()->prepare('SELECT * FROM users WHERE username = ?');
         $st->execute([$username]);
@@ -30,10 +37,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $ok = password_verify($password, $hash) && $user !== null;
 
         if (!$ok) {
-            record_attempt('ip', $ip);
-            record_attempt('user', $userKey);
-            log_event($user ? (int) $user['id'] : null, 'Mot de passe incorrect pour « ' . mb_substr($username, 0, 40) . ' »');
-            $error = 'Identifiant ou mot de passe incorrect.';
+            login_failed('user', $userKey, $user, 'Mot de passe incorrect pour « ' . mb_substr($username, 0, 40) . ' »');
+            $left = ip_ban_remaining($ip);
+            $error = $left > 0
+                ? 'Trop de tentatives depuis ton adresse. Réessaie dans ' . human_duration($left) . '.'
+                : 'Identifiant ou mot de passe incorrect.';
         } else {
             if (password_needs_rehash($user['password_hash'], password_algo())) {
                 db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')

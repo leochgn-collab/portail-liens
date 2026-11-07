@@ -402,3 +402,5 @@ input::placeholder { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+.panel form + form { margin-top: .6rem; }

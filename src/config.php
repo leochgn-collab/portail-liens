@@ -13,6 +13,10 @@ if (is_file($local)) {
     require $local;
 }
 
+// Fuseau horaire des dates affichées et des notifications.
+defined('APP_TIMEZONE') || define('APP_TIMEZONE', 'Europe/Paris');
+date_default_timezone_set(APP_TIMEZONE);
+
 // Nom affiché en haut du tableau de bord et dans l'application d'authentification.
 defined('APP_NAME')     || define('APP_NAME', 'Mon Portail');
 defined('APP_SUBTITLE') || define('APP_SUBTITLE', 'Portail de liens');
@@ -30,6 +34,14 @@ defined('SESSION_MAX')  || define('SESSION_MAX', 43200);
 defined('LOGIN_WINDOW')       || define('LOGIN_WINDOW', 900);
 defined('LOGIN_MAX_PER_IP')   || define('LOGIN_MAX_PER_IP', 10);
 defined('LOGIN_MAX_PER_USER') || define('LOGIN_MAX_PER_USER', 5);
+// Alerte ntfy à partir de ce nombre d'essais ratés sur un compte.
+defined('LOGIN_ALERT_AFTER')  || define('LOGIN_ALERT_AFTER', 3);
+// Attente imposée après chaque essai raté (millisecondes).
+defined('LOGIN_DELAY_MS')     || define('LOGIN_DELAY_MS', 1000);
+// Blocage progressif d'une IP : 15 min, puis 1 h, puis 24 h (et 24 h ensuite)…
+defined('BAN_STEPS')          || define('BAN_STEPS', [900, 3600, 86400]);
+// … on repart de 15 min si l'IP n'a pas été bloquée depuis 7 jours.
+defined('BAN_RESET')          || define('BAN_RESET', 7 * 86400);
 
 // Vérification de l'état des liens (pastille verte/rouge sur le tableau de bord).
 defined('STATUS_CHECK')   || define('STATUS_CHECK', true);
