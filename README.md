@@ -103,3 +103,12 @@ install.sh   installation et mise à jour
 ## Licence
 
 MIT. Le générateur de QR code (`public/assets/qrcode.js`) est de Kazuhiko Arase, sous licence MIT.
+
+## Bonus : alertes de connexion Proxmox
+
+`extras/proxmox-ntfy.sh` envoie une notification ntfy quand quelqu'un se connecte à Proxmox (interface web ou SSH), ou se trompe de mot de passe. En root sur le serveur Proxmox :
+
+```bash
+wget -qO proxmox-ntfy.sh https://raw.githubusercontent.com/leochgn-collab/portail-liens/main/extras/proxmox-ntfy.sh
+bash proxmox-ntfy.sh install
+```
