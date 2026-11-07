@@ -134,7 +134,6 @@ function auth_start(string $title): void
 function auth_end(): void
 {
     ?>
-  <p class="auth-foot"><?= icon('lock') ?> Connexion chiffrée · Double authentification</p>
 </main>
 <script src="<?= e(asset('qrcode.js')) ?>"></script>
 <script src="<?= e(asset('app.js')) ?>"></script>
