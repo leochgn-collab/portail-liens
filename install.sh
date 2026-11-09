@@ -94,6 +94,9 @@ main() {
 # ─── Mise à jour d'une installation existante ──────────────────────────
 if [ -d "$DIR/.git" ] && [ -f "$CONF" ]; then
   etape "Installation existante trouvée : mise à jour"
+  # Le dossier appartient à root:www-data : on indique à git qu'il est sûr.
+  git config --global --get-all safe.directory 2>/dev/null | grep -qx "$DIR" \
+    || git config --global --add safe.directory "$DIR"
   git -C "$DIR" fetch --quiet origin
   git -C "$DIR" reset --quiet --hard origin/main
   chown -R root:www-data "$DIR"
@@ -145,6 +148,8 @@ if [ -d "$DIR" ] && [ ! -d "$DIR/.git" ]; then
   mv "$DIR" "$SAUVE"
 fi
 [ -d "$DIR/.git" ] || git clone --quiet "$REPO" "$DIR"
+git config --global --get-all safe.directory 2>/dev/null | grep -qx "$DIR" \
+  || git config --global --add safe.directory "$DIR"
 mkdir -p "$DIR/data"
 if [ -n "${SAUVE:-}" ] && [ -d "$SAUVE/data" ]; then
   cp -a "$SAUVE/data/." "$DIR/data/" 2>/dev/null || true
