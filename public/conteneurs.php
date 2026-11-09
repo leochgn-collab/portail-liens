@@ -65,7 +65,10 @@ page_start('Conteneurs', $me, 'conteneurs');
 
 <?php if (!pve_configured()): ?>
   <div class="alert alert-error" role="alert">Proxmox n'est pas configuré. Ajoute PVE_URL et PVE_TOKEN dans config.local.php (voir README).</div>
-<?php elseif ($list['error']): ?>
+<?php elseif (!pve_verify()): ?>
+  <div class="alert alert-warn" role="alert">Le certificat de Proxmox n'est pas vérifié : ajoute PVE_CA dans config.local.php (voir README) pour que le jeton ne puisse pas être intercepté.</div>
+<?php endif; ?>
+<?php if (pve_configured() && $list['error']): ?>
   <div class="alert alert-error" role="alert"><?= e($list['error']) ?></div>
 <?php endif; ?>
 

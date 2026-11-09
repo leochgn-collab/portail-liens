@@ -55,7 +55,10 @@ defined('STATUS_TIMEOUT') || define('STATUS_TIMEOUT', 4); // secondes par lien
 defined('PVE_URL')        || define('PVE_URL', '');
 defined('PVE_TOKEN')      || define('PVE_TOKEN', '');
 defined('PVE_NODE')       || define('PVE_NODE', 'leo');
-// Certificat Proxmox auto-signé : vérification désactivée par défaut (réseau local uniquement).
+// Certificat de Proxmox : indique le fichier de son autorité (pve-root-ca.pem copié sur ce serveur)
+// pour que le portail vérifie qu'il parle bien à ton Proxmox avant d'envoyer le jeton.
+defined('PVE_CA')         || define('PVE_CA', '');
+// Sans PVE_CA, la vérification est désactivée (certificat auto-signé) : à éviter.
 defined('PVE_VERIFY_TLS') || define('PVE_VERIFY_TLS', false);
 // CT que le portail ne peut jamais arrêter ni planifier (le portail lui-même).
 defined('PVE_PROTECTED')  || define('PVE_PROTECTED', [106]);

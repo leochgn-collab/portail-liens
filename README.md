@@ -120,6 +120,12 @@ Les administrateurs peuvent démarrer et arrêter proprement leurs CT Proxmox, e
    const PVE_TOKEN = 'root@pam!portail=LE_SECRET';
    ```
 
+3. Pour que le portail vérifie le certificat de Proxmox (recommandé), copie l'autorité de Proxmox dans le CT du portail, depuis l'hôte :
+   ```bash
+   pct push 106 /etc/pve/pve-root-ca.pem /etc/ssl/certs/pve-root-ca.pem
+   ```
+   puis ajoute dans `config.local.php` : `const PVE_CA = '/etc/ssl/certs/pve-root-ca.pem';`
+
 Le droit donné sur `/vms` couvre aussi les CT créés plus tard : le portail les détecte dans la minute, les affiche avec un badge « Nouveau » et envoie une alerte ntfy (de même quand un CT est supprimé).
 
 Le CT du portail (106 par défaut, réglable avec `PVE_PROTECTED`) ne peut jamais être arrêté depuis la page.

@@ -8,6 +8,12 @@ function pve_configured(): bool
     return PVE_URL !== '' && PVE_TOKEN !== '';
 }
 
+/** Le certificat de Proxmox est-il vérifié ? */
+function pve_verify(): bool
+{
+    return PVE_CA !== '' || PVE_VERIFY_TLS;
+}
+
 /** @return array{ok:bool,data:mixed,error:?string} */
 function pve_request(string $method, string $path, array $data = []): array
 {
@@ -21,10 +27,13 @@ function pve_request(string $method, string $path, array $data = []): array
         CURLOPT_CONNECTTIMEOUT => 4,
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_HTTPHEADER     => ['Authorization: PVEAPIToken=' . PVE_TOKEN],
-        CURLOPT_SSL_VERIFYPEER => PVE_VERIFY_TLS,
-        CURLOPT_SSL_VERIFYHOST => PVE_VERIFY_TLS ? 2 : 0,
+        CURLOPT_SSL_VERIFYPEER => pve_verify(),
+        CURLOPT_SSL_VERIFYHOST => pve_verify() ? 2 : 0,
         CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
     ]);
+    if (PVE_CA !== '') {
+        curl_setopt($ch, CURLOPT_CAINFO, PVE_CA);
+    }
     if ($data && $method !== 'GET') {
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
     }
@@ -32,7 +41,8 @@ function pve_request(string $method, string $path, array $data = []): array
     $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err  = curl_error($ch);
     if ($body === false) {
-        return ['ok' => false, 'data' => null, 'error' => 'Proxmox injoignable : ' . $err];
+        $tls = stripos($err, 'certificate') !== false || stripos($err, 'SSL') !== false;
+        return ['ok' => false, 'data' => null, 'error' => ($tls ? 'Certificat de Proxmox refusé (vérifie PVE_CA et l\'adresse PVE_URL) : ' : 'Proxmox injoignable : ') . $err];
     }
     $json = json_decode((string) $body, true);
     if ($code >= 400) {
