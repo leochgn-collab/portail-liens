@@ -43,6 +43,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $list  = pve_list_cts();
+if ($list['error'] === null) {
+    ct_detect_changes($list['cts']); // la page voit aussi tout de suite un CT créé
+}
+$recent = ct_recent();
 $sched = [];
 foreach (db()->query('SELECT * FROM ct_schedule')->fetchAll() as $s) {
     $sched[(int) $s['vmid']] = $s;
@@ -94,11 +98,11 @@ page_start('Conteneurs', $me, 'conteneurs');
         ? "Arrêter « $name » peut couper l'accès à tous tes sites. Continuer ?"
         : "Arrêter le CT $id « $name » ?";
     ?>
-  <article class="ct<?= $run ? ' ct-run' : ' ct-stop' ?>">
+  <article class="ct<?= $run ? ' ct-run' : ' ct-stop' ?><?= isset($recent[$id]) ? ' ct-new' : '' ?>">
     <div class="ct-head">
       <span class="ct-ic"><?= icon('server') ?></span>
       <div class="ct-title">
-        <strong><?= e($name) ?><?= $prot ? ' <span class="badge badge-priv">Protégé</span>' : '' ?></strong>
+        <strong><?= e($name) ?><?= $prot ? ' <span class="badge badge-priv">Protégé</span>' : '' ?><?= isset($recent[$id]) ? ' <span class="badge badge-new">Nouveau</span>' : '' ?></strong>
         <span class="host mono">CT <?= $id ?></span>
       </div>
       <span class="ct-state"><span class="dot <?= $run ? 'up' : 'down' ?>"></span><?= $run ? 'En marche' : 'Arrêté' ?></span>

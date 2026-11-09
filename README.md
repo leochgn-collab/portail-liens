@@ -112,13 +112,15 @@ Les administrateurs peuvent démarrer et arrêter proprement leurs CT Proxmox, e
    ```bash
    pveum role add CTPower -privs "VM.PowerMgmt VM.Audit"
    pveum user token add root@pam portail --privsep 1
-   for id in $(pct list | awk 'NR>1{print $1}'); do pveum acl modify /vms/$id --tokens 'root@pam!portail' --roles CTPower; done
+   pveum acl modify /vms --tokens 'root@pam!portail' --roles CTPower --propagate 1
    ```
 2. Dans `config.local.php` du portail :
    ```php
    const PVE_URL   = 'https://192.168.1.203:8006';
    const PVE_TOKEN = 'root@pam!portail=LE_SECRET';
    ```
+
+Le droit donné sur `/vms` couvre aussi les CT créés plus tard : le portail les détecte dans la minute, les affiche avec un badge « Nouveau » et envoie une alerte ntfy (de même quand un CT est supprimé).
 
 Le CT du portail (106 par défaut, réglable avec `PVE_PROTECTED`) ne peut jamais être arrêté depuis la page.
 

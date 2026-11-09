@@ -607,3 +607,5 @@ form[data-autosubmit] .seg { max-width: 380px; }
   .ct-list { grid-template-columns: 1fr; }
 }
 @media (max-width: 420px) { .stats-3 { grid-template-columns: 1fr 1fr; } }
+.badge-new { background: rgba(var(--accent-rgb), .2); color: #fff; border-color: rgba(var(--accent-rgb), .5); box-shadow: 0 0 12px rgba(var(--accent-rgb), .6); }
+.ct-new { border-color: rgba(var(--accent-rgb), .55); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(var(--accent-rgb), .25), 0 14px 40px -14px rgba(var(--accent-rgb), .7); }

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// Planificateur des plages horaires des CT. Lancé chaque minute par cron, en www-data :
+// Planificateur des plages horaires des CT et détection des nouveaux CT. Lancé chaque minute par cron, en www-data :
 //   * * * * * www-data php /var/www/portail-liens/bin/scheduler.php
 // Il n'agit qu'aux changements de plage (arrêt à l'heure d'extinction, démarrage à l'heure
 // d'allumage) : un démarrage ou un arrêt manuel entre deux reste donc respecté.
@@ -15,6 +15,12 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 if (!pve_configured()) {
     exit(0);
 }
+// Détection des CT créés ou supprimés.
+$list = pve_list_cts();
+if ($list['error'] === null) {
+    ct_detect_changes($list['cts']);
+}
+
 $now = date('H:i');
 $rows = db()->query('SELECT * FROM ct_schedule WHERE enabled = 1')->fetchAll();
 foreach ($rows as $row) {

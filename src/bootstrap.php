@@ -101,6 +101,11 @@ function migrate(PDO $pdo): void
             enabled    INTEGER NOT NULL DEFAULT 1,
             last_state INTEGER
         );
+        CREATE TABLE IF NOT EXISTS ct_known (
+            vmid       INTEGER PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            first_seen INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS journal (
             id      INTEGER PRIMARY KEY,
             user_id INTEGER,

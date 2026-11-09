@@ -112,3 +112,65 @@ function ct_timeline(string $off, string $on, bool $enabled = true): string
     return $svg . '<rect class="tl-now" x="' . round($n * $k - 0.75, 2) . '" y="-2" width="1.5" height="18" rx=".75"/></svg>'
         . '<div class="tl-scale"><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>';
 }
+
+/**
+ * Compare la liste des CT à celle déjà connue : enregistre les nouveaux, oublie les supprimés
+ * et prévient sur ntfy. Au tout premier passage, les CT existants sont enregistrés sans alerte.
+ * @return array{new:array,gone:array}
+ */
+function ct_detect_changes(array $cts): array
+{
+    $pdo = db();
+    $known = [];
+    foreach ($pdo->query('SELECT vmid, name FROM ct_known') as $r) {
+        $known[(int) $r['vmid']] = (string) $r['name'];
+    }
+    $first = !$known && setting('ct_known_init') !== '1';
+    $now = time();
+    $seen = [];
+    $new = [];
+    foreach ($cts as $ct) {
+        $id = (int) $ct['vmid'];
+        $name = (string) ($ct['name'] ?? '');
+        $seen[$id] = true;
+        if (!isset($known[$id])) {
+            $pdo->prepare('INSERT INTO ct_known (vmid, name, first_seen) VALUES (?, ?, ?)')
+                ->execute([$id, $name, $first ? 0 : $now]);
+            if (!$first) {
+                $new[$id] = $name;
+            }
+        } elseif ($known[$id] !== $name) {
+            $pdo->prepare('UPDATE ct_known SET name = ? WHERE vmid = ?')->execute([$name, $id]);
+        }
+    }
+    $gone = array_diff_key($known, $seen);
+    foreach ($gone as $id => $name) {
+        $pdo->prepare('DELETE FROM ct_known WHERE vmid = ?')->execute([$id]);
+        // Plage gardée mais mise en pause : si le CT revient (droits rétablis…), il suffit de la réactiver.
+        $pdo->prepare('UPDATE ct_schedule SET enabled = 0 WHERE vmid = ?')->execute([$id]);
+    }
+    if ($first) {
+        set_setting('ct_known_init', '1');
+    }
+    foreach ($new as $id => $name) {
+        log_event(null, "Nouveau conteneur détecté : CT $id « $name »");
+        notify("Nouveau conteneur : CT $id", "« $name » vient d'apparaître dans Proxmox. Il est ajouté à la page Conteneurs du portail.", 3, ['new']);
+    }
+    foreach ($gone as $id => $name) {
+        log_event(null, "Conteneur disparu : CT $id « $name »");
+        notify("Conteneur supprimé : CT $id", "« $name » n'existe plus dans Proxmox (ou le portail n'a plus le droit de le voir).", 3, ['wastebasket']);
+    }
+    return ['new' => $new, 'gone' => $gone];
+}
+
+/** CT apparus depuis moins de 24 h. @return array<int,int> vmid => date d'apparition */
+function ct_recent(): array
+{
+    $st = db()->prepare('SELECT vmid, first_seen FROM ct_known WHERE first_seen > ?');
+    $st->execute([time() - 86400]);
+    $out = [];
+    foreach ($st as $r) {
+        $out[(int) $r['vmid']] = (int) $r['first_seen'];
+    }
+    return $out;
+}
