@@ -1,0 +1,114 @@
+<?php
+declare(strict_types=1);
+
+// Client minimal de l'API Proxmox VE + logique des plages horaires (page « Conteneurs »).
+
+function pve_configured(): bool
+{
+    return PVE_URL !== '' && PVE_TOKEN !== '';
+}
+
+/** @return array{ok:bool,data:mixed,error:?string} */
+function pve_request(string $method, string $path, array $data = []): array
+{
+    if (!pve_configured()) {
+        return ['ok' => false, 'data' => null, 'error' => 'Proxmox non configuré (PVE_URL / PVE_TOKEN).'];
+    }
+    $ch = curl_init(rtrim(PVE_URL, '/') . '/api2/json' . $path);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_CUSTOMREQUEST  => $method,
+        CURLOPT_HTTPHEADER     => ['Authorization: PVEAPIToken=' . PVE_TOKEN],
+        CURLOPT_SSL_VERIFYPEER => PVE_VERIFY_TLS,
+        CURLOPT_SSL_VERIFYHOST => PVE_VERIFY_TLS ? 2 : 0,
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+    ]);
+    if ($data && $method !== 'GET') {
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    }
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err  = curl_error($ch);
+    if ($body === false) {
+        return ['ok' => false, 'data' => null, 'error' => 'Proxmox injoignable : ' . $err];
+    }
+    $json = json_decode((string) $body, true);
+    if ($code >= 400) {
+        return ['ok' => false, 'data' => null, 'error' => $code === 401 || $code === 403
+            ? 'Proxmox refuse l\'accès (jeton ou droits insuffisants).' : "Erreur Proxmox HTTP $code."];
+    }
+    return ['ok' => true, 'data' => $json['data'] ?? null, 'error' => null];
+}
+
+/** Liste des CT du nœud, triés par identifiant. @return array{cts:array,error:?string} */
+function pve_list_cts(): array
+{
+    $r = pve_request('GET', '/nodes/' . rawurlencode(PVE_NODE) . '/lxc');
+    if (!$r['ok']) {
+        return ['cts' => [], 'error' => $r['error']];
+    }
+    $cts = is_array($r['data']) ? $r['data'] : [];
+    usort($cts, fn ($a, $b) => (int) $a['vmid'] <=> (int) $b['vmid']);
+    return ['cts' => $cts, 'error' => null];
+}
+
+/**
+ * Action : start | shutdown | stop. Renvoie un message d'erreur ou null.
+ * « shutdown » est un arrêt propre ; Proxmox force l'arrêt seulement si le CT
+ * ne s'est pas éteint au bout de PVE_SHUTDOWN_TIMEOUT secondes.
+ */
+function pve_action(int $vmid, string $action): ?string
+{
+    if (!in_array($action, ['start', 'shutdown', 'stop'], true)) {
+        return 'Action inconnue.';
+    }
+    if ($action !== 'start' && in_array($vmid, PVE_PROTECTED, true)) {
+        return "Le CT $vmid est protégé : le portail ne peut pas l'arrêter.";
+    }
+    $data = $action === 'shutdown' ? ['timeout' => PVE_SHUTDOWN_TIMEOUT, 'forceStop' => 1] : [];
+    $r = pve_request('POST', '/nodes/' . rawurlencode(PVE_NODE) . "/lxc/$vmid/status/$action", $data);
+    return $r['ok'] ? null : $r['error'];
+}
+
+function ct_valid_time(string $t): bool
+{
+    return (bool) preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t);
+}
+
+function ct_minutes(string $t): int
+{
+    [$h, $m] = explode(':', $t);
+    return (int) $h * 60 + (int) $m;
+}
+
+/** Vrai si le CT doit être éteint à $now (HH:MM). Gère les plages qui passent minuit. */
+function ct_should_be_off(string $off, string $on, string $now): bool
+{
+    $a = ct_minutes($off);
+    $b = ct_minutes($on);
+    $n = ct_minutes($now);
+    if ($a === $b) {
+        return false;
+    }
+    return $a < $b ? ($n >= $a && $n < $b) : ($n >= $a || $n < $b);
+}
+
+/** Frise 24 h : vert = allumé, rouge = éteint, trait blanc = maintenant. */
+function ct_timeline(string $off, string $on, bool $enabled = true): string
+{
+    $a = ct_minutes($off);
+    $b = ct_minutes($on);
+    $segs = $a < $b ? [[$a, $b]] : [[$a, 1440], [0, $b]];
+    $k = 240 / 1440;
+    $svg = '<svg class="tl' . ($enabled ? '' : ' tl-paused') . '" viewBox="0 0 240 14" preserveAspectRatio="none" role="img" aria-label="Frise sur 24 heures : éteint de '
+        . e($off) . ' à ' . e($on) . '">'
+        . '<rect class="tl-on" x="0" y="0" width="240" height="14" rx="7"/>';
+    foreach ($segs as [$x, $y]) {
+        $svg .= '<rect class="tl-off" x="' . round($x * $k, 2) . '" y="0" width="' . round(($y - $x) * $k, 2) . '" height="14"/>';
+    }
+    $n = ct_minutes(date('H:i'));
+    return $svg . '<rect class="tl-now" x="' . round($n * $k - 0.75, 2) . '" y="-2" width="1.5" height="18" rx=".75"/></svg>'
+        . '<div class="tl-scale"><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>';
+}

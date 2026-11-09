@@ -6,6 +6,7 @@ define('DATA_DIR', ROOT . '/data');
 
 require __DIR__ . '/config.php';
 require __DIR__ . '/totp.php';
+require __DIR__ . '/proxmox.php';
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -92,6 +93,13 @@ function migrate(PDO $pdo): void
             body        TEXT NOT NULL,
             position    INTEGER NOT NULL DEFAULT 0,
             updated_at  INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ct_schedule (
+            vmid       INTEGER PRIMARY KEY,
+            off_time   TEXT NOT NULL,
+            on_time    TEXT NOT NULL,
+            enabled    INTEGER NOT NULL DEFAULT 1,
+            last_state INTEGER
         );
         CREATE TABLE IF NOT EXISTS journal (
             id      INTEGER PRIMARY KEY,
@@ -458,7 +466,8 @@ function notify(string $title, string $message, int $priority = 3, array $tags =
             }
         });
     }
-    $queue[] = [$title, $message . "\nIP : " . client_ip() . ' · ' . date('d/m/Y H:i'), $priority, $tags];
+    $where = client_ip() === 'console' ? '' : "\nIP : " . client_ip() . ' ·';
+    $queue[] = [$title, $message . $where . ' ' . date('d/m/Y H:i'), $priority, $tags];
 }
 
 // ─── Blocage progressif des adresses IP ────────────────────────────────

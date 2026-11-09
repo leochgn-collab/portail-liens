@@ -84,6 +84,12 @@ EOF
   a2enconf -q zz-portail-durcissement >/dev/null
 }
 
+# Planificateur des plages horaires des conteneurs Proxmox (page « Conteneurs »).
+installer_cron() {
+  echo "* * * * * www-data php $DIR/bin/scheduler.php" > /etc/cron.d/portail-ct
+  chmod 644 /etc/cron.d/portail-ct
+}
+
 # Tout le script est dans main() : bash le lit en entier avant de l'exécuter,
 # ce qui permet à la mise à jour de remplacer ce fichier sans danger.
 main() {
@@ -108,6 +114,7 @@ if [ -d "$DIR/.git" ] && [ -f "$CONF" ]; then
     ecrire_vhost "$(awk '/^[[:space:]]*ServerName/ {print $2; exit}' "$CONF")"
   fi
   durcir_apache
+  installer_cron
   apache2ctl configtest
   systemctl reload "php$PHPV-fpm" apache2
   vert "✔ Portail mis à jour (version $(git -C "$DIR" log -1 --format='%h du %cd' --date=format:'%d/%m/%Y'))."
@@ -178,6 +185,7 @@ systemctl enable --now "php$PHPV-fpm" >/dev/null
 
 ecrire_vhost "$DOMAINE"
 durcir_apache
+installer_cron
 a2dissite -q 000-default >/dev/null 2>&1 || true
 a2ensite -q portail-liens >/dev/null
 apache2ctl configtest

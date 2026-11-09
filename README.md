@@ -104,6 +104,24 @@ install.sh   installation et mise à jour
 
 MIT. Le générateur de QR code (`public/assets/qrcode.js`) est de Kazuhiko Arase, sous licence MIT.
 
+## Page « Conteneurs » (Proxmox)
+
+Les administrateurs peuvent démarrer et arrêter proprement leurs CT Proxmox, et programmer des plages d'extinction (ex. éteint de 23:00 à 07:00), affichées sur une frise de 24 h. Le planificateur est lancé chaque minute par cron (`/etc/cron.d/portail-ct`, créé par `install.sh`).
+
+1. Sur l'hôte Proxmox, crée un rôle et un jeton limités :
+   ```bash
+   pveum role add CTPower -privs "VM.PowerMgmt VM.Audit"
+   pveum user token add root@pam portail --privsep 1
+   for id in $(pct list | awk 'NR>1{print $1}'); do pveum acl modify /vms/$id --tokens 'root@pam!portail' --roles CTPower; done
+   ```
+2. Dans `config.local.php` du portail :
+   ```php
+   const PVE_URL   = 'https://192.168.1.203:8006';
+   const PVE_TOKEN = 'root@pam!portail=LE_SECRET';
+   ```
+
+Le CT du portail (106 par défaut, réglable avec `PVE_PROTECTED`) ne peut jamais être arrêté depuis la page.
+
 ## Bonus : alertes de connexion Proxmox
 
 `extras/proxmox-ntfy.sh` envoie une notification ntfy quand quelqu'un se connecte à Proxmox (interface web ou SSH), ou se trompe de mot de passe. En root sur le serveur Proxmox :

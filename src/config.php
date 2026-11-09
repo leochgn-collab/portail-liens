@@ -47,3 +47,19 @@ defined('BAN_RESET')          || define('BAN_RESET', 7 * 86400);
 defined('STATUS_CHECK')   || define('STATUS_CHECK', true);
 defined('STATUS_CACHE')   || define('STATUS_CACHE', 120); // secondes
 defined('STATUS_TIMEOUT') || define('STATUS_TIMEOUT', 4); // secondes par lien
+
+// ─── Pilotage des conteneurs Proxmox (page « Conteneurs ») ───────────────
+// À définir dans config.local.php (le secret du jeton ne doit JAMAIS être dans git) :
+//   const PVE_URL   = 'https://192.168.1.203:8006';
+//   const PVE_TOKEN = 'root@pam!portail=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
+defined('PVE_URL')        || define('PVE_URL', '');
+defined('PVE_TOKEN')      || define('PVE_TOKEN', '');
+defined('PVE_NODE')       || define('PVE_NODE', 'leo');
+// Certificat Proxmox auto-signé : vérification désactivée par défaut (réseau local uniquement).
+defined('PVE_VERIFY_TLS') || define('PVE_VERIFY_TLS', false);
+// CT que le portail ne peut jamais arrêter ni planifier (le portail lui-même).
+defined('PVE_PROTECTED')  || define('PVE_PROTECTED', [106]);
+// CT dont l'arrêt demande une confirmation renforcée (ex. Zoraxy : coupe tous les sites).
+defined('PVE_CONFIRM')    || define('PVE_CONFIRM', [104]);
+// Délai laissé à un CT pour s'éteindre proprement avant l'arrêt forcé (secondes).
+defined('PVE_SHUTDOWN_TIMEOUT') || define('PVE_SHUTDOWN_TIMEOUT', 60);
