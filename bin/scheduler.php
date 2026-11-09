@@ -15,29 +15,49 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 if (!pve_configured()) {
     exit(0);
 }
-// Détection des CT créés ou supprimés.
+// Détection des CT créés ou supprimés, et état actuel de chaque CT.
 $list = pve_list_cts();
-if ($list['error'] === null) {
-    ct_detect_changes($list['cts']);
+if ($list['error'] !== null) {
+    exit(0); // Proxmox injoignable : on n'agit pas à l'aveugle, on réessaiera dans une minute
+}
+ct_detect_changes($list['cts']);
+$status = [];
+foreach ($list['cts'] as $ct) {
+    $status[(int) $ct['vmid']] = (string) ($ct['status'] ?? '');
 }
 
 $now = date('H:i');
 $rows = db()->query('SELECT * FROM ct_schedule WHERE enabled = 1')->fetchAll();
 foreach ($rows as $row) {
     $vmid = (int) $row['vmid'];
-    if (in_array($vmid, PVE_PROTECTED, true)) {
+    if (in_array($vmid, PVE_PROTECTED, true) || !isset($status[$vmid])) {
         continue;
     }
     $off = ct_should_be_off($row['off_time'], $row['on_time'], $now) ? 1 : 0;
     if ($row['last_state'] !== null && (int) $row['last_state'] === $off) {
         continue; // rien n'a changé depuis la dernière action
     }
+    $mark = static function () use ($vmid, $off): void {
+        db()->prepare('UPDATE ct_schedule SET last_state = ? WHERE vmid = ?')->execute([$off, $vmid]);
+        set_setting("ct_fail_$vmid", '');
+    };
+
+    // Déjà dans l'état voulu (allumé à la main, déjà éteint…) : rien à faire, on le note.
+    $running = $status[$vmid] === 'running';
+    if ($off ? !$running : $running) {
+        $mark();
+        continue;
+    }
+
     $err = pve_action($vmid, $off ? 'shutdown' : 'start');
     if ($err === null) {
-        db()->prepare('UPDATE ct_schedule SET last_state = ? WHERE vmid = ?')->execute([$off, $vmid]);
+        $mark();
         log_event(null, "CT $vmid " . ($off ? 'arrêté' : 'démarré') . ' (plage horaire)');
         notify('CT ' . $vmid, $off ? 'Arrêt programmé' : 'Démarrage programmé', 2, [$off ? 'zzz' : 'sunny']);
-    } else {
-        log_event(null, "CT $vmid : échec plage horaire — $err");
+    } elseif (setting("ct_fail_$vmid") !== $err) {
+        // Une seule ligne au journal et une seule alerte par erreur, pas une par minute.
+        set_setting("ct_fail_$vmid", $err);
+        log_event(null, "CT $vmid : échec plage horaire — $err (nouvel essai chaque minute)");
+        notify("CT $vmid : échec de la plage horaire", $err, 4, ['warning']);
     }
 }

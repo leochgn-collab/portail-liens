@@ -30,7 +30,14 @@ function pve_request(string $method, string $path, array $data = []): array
         CURLOPT_SSL_VERIFYPEER => pve_verify(),
         CURLOPT_SSL_VERIFYHOST => pve_verify() ? 2 : 0,
         CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (&$statusText): int {
+            if (preg_match('#^HTTP/\S+\s+\d+\s+(.+)$#', trim($line), $m)) {
+                $statusText = $m[1];
+            }
+            return strlen($line);
+        },
     ]);
+    $statusText = '';
     if (PVE_CA !== '') {
         curl_setopt($ch, CURLOPT_CAINFO, PVE_CA);
     }
@@ -45,9 +52,19 @@ function pve_request(string $method, string $path, array $data = []): array
         return ['ok' => false, 'data' => null, 'error' => ($tls ? 'Certificat de Proxmox refusé (vérifie PVE_CA et l\'adresse PVE_URL) : ' : 'Proxmox injoignable : ') . $err];
     }
     $json = json_decode((string) $body, true);
+    if (!is_array($json)) {
+        $json = [];
+    }
+    $json['message'] ??= $statusText;
     if ($code >= 400) {
-        return ['ok' => false, 'data' => null, 'error' => $code === 401 || $code === 403
-            ? 'Proxmox refuse l\'accès (jeton ou droits insuffisants).' : "Erreur Proxmox HTTP $code."];
+        if ($code === 401 || $code === 403) {
+            $msg = 'Proxmox refuse l\'accès (jeton ou droits insuffisants).';
+        } else {
+            // Proxmox donne la raison dans le texte de statut HTTP (ex. « CT 209 already running »).
+            $raison = trim((string) ($json['message'] ?? ''));
+            $msg = "Erreur Proxmox HTTP $code" . ($raison !== '' ? ' : ' . mb_substr($raison, 0, 200) : '.');
+        }
+        return ['ok' => false, 'data' => null, 'error' => $msg];
     }
     return ['ok' => true, 'data' => $json['data'] ?? null, 'error' => null];
 }
