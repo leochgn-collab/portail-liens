@@ -103,18 +103,20 @@ page_start('Tableau de bord', $user, 'dashboard');
           ?>
         <a class="tile<?= $priv ? ' tile-priv' : '' ?>" data-kind="<?= $priv ? 'private' : 'public' ?>" href="<?= e($l['url']) ?>" target="_blank" rel="noopener noreferrer"
            data-id="<?= (int) $l['id'] ?>" data-search="<?= e($search) ?>">
-          <span class="tile-ic h<?= $hue ?>">
-            <?= $l['icon'] !== '' ? e($l['icon']) : e(mb_strtoupper(mb_substr($l['title'], 0, 1))) ?>
+          <span class="tile-top">
+            <span class="tile-ic h<?= $hue ?>">
+              <?= $l['icon'] !== '' ? e($l['icon']) : e(mb_strtoupper(mb_substr($l['title'], 0, 1))) ?>
+            </span>
+            <span class="go"><?= icon('arrow') ?></span>
           </span>
           <span class="tile-body">
             <strong><span class="t"><?= e($l['title']) ?></span><?php if ($priv): ?><span class="badge badge-priv" title="Accessible uniquement depuis ton réseau local ou ton VPN">Privé</span><?php endif; ?></strong>
             <span class="host mono"><?= e(link_host($l['url'])) ?></span>
             <?php if ($l['description'] !== ''): ?><span class="desc"><?= e($l['description']) ?></span><?php endif; ?>
           </span>
-          <span class="tile-side">
-            <span class="dot" title="État inconnu"></span>
-            <span class="go"><?= icon('arrow') ?></span>
-          </span>
+          <?php if (STATUS_CHECK): ?>
+          <span class="tile-status"><span class="dot"></span><span class="st">Vérification…</span></span>
+          <?php endif; ?>
         </a>
       <?php endforeach; ?>
     </div>

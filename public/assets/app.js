@@ -142,6 +142,8 @@
             total++;
             if (s.up) up++;
             dot.className = 'dot ' + (s.up ? 'up' : 'down');
+            var st = t.querySelector('.st');
+            if (st) st.textContent = s.up ? 'En ligne · ' + s.ms + ' ms' : 'Hors ligne';
             dot.title = (s.up ? 'En ligne · ' + s.ms + ' ms' : 'Hors ligne' + (s.code ? ' (erreur ' + s.code + ')' : ''))
               + (t.getAttribute('data-kind') === 'private' ? ' — vu depuis le serveur' : '');
           });
