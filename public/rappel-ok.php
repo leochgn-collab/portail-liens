@@ -5,8 +5,13 @@ declare(strict_types=1);
 // boutons). Pas de connexion requise : le lien contient un jeton secret propre à ce rappel.
 require dirname(__DIR__) . '/src/bootstrap.php';
 
-stop_if_banned();
+// Pas de blocage d'IP ici : le jeton (160 bits) ne se devine pas, et un vieux bouton touché après une
+// mise à jour ne doit pas bloquer ta propre connexion. Simple limite de débit en cas d'abus.
 start_session();
+if (too_many_attempts('ack', client_ip(), 60)) {
+    http_response_code(429);
+    exit('Trop de demandes, réessaie dans quelques minutes.');
+}
 
 $id   = (int) ($_REQUEST['id'] ?? 0);
 $key  = (string) ($_REQUEST['k'] ?? '');
@@ -21,7 +26,7 @@ $ua  = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
 $via = 'depuis la notification · ' . (preg_match('/ntfy[^ ]*/i', $ua, $m) ? $m[0] : (preg_match('/iPhone|Android|Windows|Mac/', $ua, $m) ? 'navigateur ' . $m[0] : 'appareil inconnu'));
 
 if (!$r || !preg_match('/^[a-f0-9]{40}$/', $key) || !hash_equals(rappel_token($r), $key)) {
-    login_failed('ack', client_ip(), null, 'Lien de rappel invalide');
+    record_attempt('ack', client_ip());
     $state = 'bad';
 } elseif ($post && $act === 'done') {
     if ($r['pending_since'] !== null) {
@@ -59,7 +64,7 @@ auth_start('Rappel');
       <p class="muted"><?= e($done) ?></p>
     <?php else: ?>
       <h1>Lien invalide</h1>
-      <p class="muted">Ce lien ne correspond à aucun rappel. Ouvre la page Rappels du portail.</p>
+      <p class="muted">Ce lien ne correspond à aucun rappel (notification d'avant une mise à jour, ou rappel supprimé). Ouvre la page Rappels du portail.</p>
     <?php endif; ?>
   </div>
   <?php if ($state === 'ask'): ?>

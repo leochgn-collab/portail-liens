@@ -430,7 +430,7 @@ function rappels_run(int $now): void
             continue;
         }
         $msg = ($r['message'] !== '' ? $r['message'] . "\n" : '') . 'Rappel reporté.';
-        if (rappel_send($r, '⏰ ' . $r['title'], $msg, ['alarm_clock'], false) === null) {
+        if (rappel_send($r, (string) $r['title'], $msg, ['alarm_clock'], false) === null) {
             db()->prepare('UPDATE reminders SET snooze_at = NULL WHERE id = ?')->execute([$r['id']]);
         }
     }
@@ -451,7 +451,7 @@ function rappels_run(int $now): void
         $n    = (int) $r['nag_count'] + 1;
         $up   = (int) $r['nag_escalate'] === 1 && $n >= RAPPEL_ESCALADE;
         $msg  = ($r['message'] !== '' ? $r['message'] . "\n" : '') . "Relance n°$n · prévu " . rappel_when((int) $r['pending_since']) . ', pas encore validé.';
-        if (rappel_send($r, ($up ? '🚨 ' : '🔁 ') . $r['title'], $msg, ['repeat'], true, $up ? 5 : null) === null) {
+        if (rappel_send($r, (string) $r['title'], $msg, [$up ? 'rotating_light' : 'repeat'], true, $up ? 5 : null) === null) {
             db()->prepare('UPDATE reminders SET nag_count = ?, nag_next = ? WHERE id = ?')
                 ->execute([$n, $now + 60 * (int) $r['nag_every'], $r['id']]);
             log_event((int) $r['user_id'], "Rappel « {$r['title']} » : relance n°$n envoyée" . ($up ? ' (urgente)' : ''));
