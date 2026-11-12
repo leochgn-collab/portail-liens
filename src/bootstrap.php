@@ -151,8 +151,11 @@ function migrate(PDO $pdo): void
     if (!in_array('theme', $ucols, true)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'bleu'");
     }
-    if (!in_array('rappel_topic', $ucols, true)) { // sujet ntfy de tous les rappels du compte
-        $pdo->exec("ALTER TABLE users ADD COLUMN rappel_topic TEXT NOT NULL DEFAULT ''");
+    // Rappels : sujet ntfy et heures de silence propres à chaque compte.
+    foreach (['rappel_topic', 'quiet_start', 'quiet_end'] as $col) {
+        if (!in_array($col, $ucols, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN $col TEXT NOT NULL DEFAULT ''");
+        }
     }
     if (!in_array('fond', $ucols, true)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN fond TEXT NOT NULL DEFAULT 'anime'");
@@ -160,7 +163,9 @@ function migrate(PDO $pdo): void
 
     // Mise à jour : rappels insistants (relance toutes les N minutes jusqu'à validation).
     $rcols = array_column($pdo->query('PRAGMA table_info(reminders)')->fetchAll(), 'name');
-    foreach (['nag_every INTEGER NOT NULL DEFAULT 0', 'pending_since INTEGER', 'nag_next INTEGER', 'nag_count INTEGER NOT NULL DEFAULT 0'] as $col) {
+    foreach (['nag_every INTEGER NOT NULL DEFAULT 0', 'pending_since INTEGER', 'nag_next INTEGER', 'nag_count INTEGER NOT NULL DEFAULT 0',
+              'nag_escalate INTEGER NOT NULL DEFAULT 1', 'snooze_at INTEGER', 'end_date TEXT', 'max_count INTEGER',
+              'sent_count INTEGER NOT NULL DEFAULT 0'] as $col) {
         if (!in_array(strtok($col, ' '), $rcols, true)) {
             $pdo->exec('ALTER TABLE reminders ADD COLUMN ' . $col);
         }

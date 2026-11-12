@@ -113,6 +113,12 @@ Chaque compte peut programmer ses propres rappels, envoyés en notification sur 
 
 **Rappel insistant 🔁** : en choisissant le type « Insistant », la notification revient toutes les 5, 10, 15, 30 ou 60 minutes tant que tu n'as pas appuyé sur **✅ C'est fait**, soit directement dans la notification ntfy, soit sur la page Rappels (24 h de relances au maximum). Le bouton de la notification appelle `rappel-ok.php` avec un jeton secret valable pour ce seul rappel en attente ; l'adresse du portail est retenue à l'ouverture de la page Rappels (ou fixée avec `const APP_URL = 'https://leo44.cloud';` dans `config.local.php`).
 
+Options :
+- **Fin** des rappels récurrents : jamais, jusqu'à une date, ou après un nombre d'envois.
+- **Plus tard** : boutons ⏰ 15 min, 1 h ou demain matin dans la notification (sur un rappel insistant : ✅ C'est fait, ⏰ 15 min et « Plus tard… »). Toucher la notification ouvre une page avec tous les choix.
+- **Escalade** : un rappel insistant passe en priorité « Urgente » à la 3e relance (case à décocher si besoin).
+- **Heures de silence** par compte (ex. 23:00 → 07:00) : seuls les rappels réglés en « Urgente » partent ; les autres attendent la fin et arrivent avec leur heure d'origine.
+
 Pour chaque rappel : un message facultatif et une priorité ntfy. En haut de la page, chaque compte choisit le **sujet ntfy de tous ses rappels** (vide : celui des alertes du portail) ; un rappel peut quand même avoir son propre sujet. Bouton « Tester » pour un envoi immédiat, pause et reprise.
 
 L'envoi est fait chaque minute par cron (`bin/rappels.php`, dans `/etc/cron.d/portail-ct`, créé par `install.sh`). Si le serveur était éteint à l'heure prévue, le rappel part au redémarrage avec l'heure d'origine. Si ntfy est injoignable, nouvel essai chaque minute et une seule ligne au journal.

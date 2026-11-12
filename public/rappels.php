@@ -22,13 +22,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $msg    = null;
 
     if ($action === 'topic_save') {
-        $t = trim((string) ($_POST['rappel_topic'] ?? ''));
+        $t  = trim((string) ($_POST['rappel_topic'] ?? ''));
+        $qa = (string) ($_POST['quiet_start'] ?? '');
+        $qb = (string) ($_POST['quiet_end'] ?? '');
+        $hm = '/^([01]\d|2[0-3]):[0-5]\d$/';
+        if (empty($_POST['quiet_on'])) {
+            $qa = $qb = '';
+        }
         if ($t !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $t)) {
             $msg = 'Sujet ntfy invalide : lettres, chiffres, - et _ uniquement (64 caractères au maximum).';
+        } elseif ($qa !== '' && (!preg_match($hm, $qa) || !preg_match($hm, $qb) || $qa === $qb)) {
+            $msg = 'Heures de silence invalides (début différent de la fin).';
         } else {
-            db()->prepare('UPDATE users SET rappel_topic = ? WHERE id = ?')->execute([$t, $uid]);
+            db()->prepare('UPDATE users SET rappel_topic = ?, quiet_start = ?, quiet_end = ? WHERE id = ?')->execute([$t, $qa, $qb, $uid]);
             log_event($uid, 'Sujet ntfy des rappels : ' . ($t !== '' ? $t : 'celui du portail'));
-            $msg = 'Tous tes rappels partiront sur le sujet « ' . ($t !== '' ? $t : setting('ntfy_topic')) . ' ».';
+            $msg = 'Réglages enregistrés · sujet « ' . ($t !== '' ? $t : setting('ntfy_topic')) . ' »'
+                . ($qa !== '' ? " · silence de $qa à $qb" : ' · pas d\'heures de silence') . '.';
             if ($t !== '' && isset($_POST['test'])) {
                 $msg = ($err = ntfy_send('Test des rappels', 'Tes rappels arriveront ici.', 3, ['alarm_clock'], $t)) ?? $msg . ' Test envoyé.';
             }
@@ -52,19 +61,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             redirect('/rappels.php' . ($action === 'update' ? '#r' . $id : '#nouveau'));
         }
         $enabled = $action === 'create' || isset($_POST['enabled']) ? 1 : 0;
-        $next = rappel_next($data, time());
+        $next = rappel_next($data + ['sent_count' => $r['sent_count'] ?? 0], time());
+        if ($action === 'update' && $enabled && $next === null) {
+            $enabled = 0; // nombre d'envois déjà atteint
+        }
         $cols = [$data['title'], $data['message'], $data['kind'], $data['at_time'], $data['on_date'], $data['weekdays'],
-                 $data['month_day'], $data['every_n'], $data['priority'], $data['topic'], $enabled, $next, $data['nag_every']];
+                 $data['month_day'], $data['every_n'], $data['priority'], $data['topic'], $enabled, $next, $data['nag_every'],
+                 $data['nag_escalate'], $data['end_date'], $data['max_count']];
         if ($action === 'create') {
             db()->prepare('INSERT INTO reminders (title, message, kind, at_time, on_date, weekdays, month_day, every_n,
-                    priority, topic, enabled, next_at, nag_every, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    priority, topic, enabled, next_at, nag_every, nag_escalate, end_date, max_count, user_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
                 ->execute([...$cols, $uid, time()]);
             $id = (int) db()->lastInsertId();
             log_event($uid, "Rappel créé : « {$data['title']} »");
             $msg = 'Rappel enregistré · prochain envoi ' . rappel_when($next) . '.';
         } else {
             db()->prepare('UPDATE reminders SET title = ?, message = ?, kind = ?, at_time = ?, on_date = ?, weekdays = ?,
-                    month_day = ?, every_n = ?, priority = ?, topic = ?, enabled = ?, next_at = ?, nag_every = ?, last_error = \'\'
+                    month_day = ?, every_n = ?, priority = ?, topic = ?, enabled = ?, next_at = ?, nag_every = ?, nag_escalate = ?, end_date = ?, max_count = ?, last_error = \'\'
                     WHERE id = ? AND user_id = ?')
                 ->execute([...$cols, $id, $uid]);
             if (!$enabled || $data['nag_every'] === 0) { // plus insistant ou en pause : fin des relances
@@ -76,18 +90,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $on   = (int) $r['enabled'] === 1 ? 0 : 1;
         $next = $on ? rappel_next($r, time()) : $r['next_at'];
         if ($on && $next === null) {
-            $msg = 'Ce rappel est déjà passé : modifie sa date pour le réactiver.';
+            $msg = 'Ce rappel est terminé : modifie sa date ou sa fin pour le relancer.';
         } else {
             // En le réactivant, on repart de maintenant : pas de rafale d'envois en retard.
             db()->prepare('UPDATE reminders SET enabled = ?, next_at = ?, last_error = \'\', pending_since = NULL, nag_next = NULL, nag_count = 0
                 WHERE id = ?')->execute([$on, $next, $r['id']]);
             $msg = $on ? 'Rappel réactivé · prochain envoi ' . rappel_when($next) . '.' : 'Rappel mis en pause.';
         }
-    } elseif ($r && $action === 'ack') {
+    } elseif ($r && $action === 'ack' && !isset($_POST['a'])) {
         if ($r['pending_since'] !== null) {
             rappel_ack($r, $uid, 'depuis le portail');
         }
         $msg = '✅ Rappel validé : plus de relance.';
+    } elseif ($r && in_array($action, ['snooze', 'ack'], true) && ($until = rappel_report_until((string) ($_POST['a'] ?? ''), time())) !== null) {
+        rappel_snooze($r, $until, $uid);
+        $msg = '⏰ Rappel reporté : il revient ' . rappel_when($until) . '.';
     } elseif ($r && $action === 'test') {
         $err = ntfy_send($r['title'], ($r['message'] !== '' ? $r['message'] : 'Rappel') . "\n(test)", (int) $r['priority'],
             ['alarm_clock'], rappel_topic($r));
@@ -129,6 +146,9 @@ function rappel_form(?array $r, ?array $post): void
     $enabled = $post !== null ? isset($post['enabled'])
         : (!$r || (int) $r['enabled'] === 1 || ($r['kind'] === 'once' && $r['last_sent_at']));
     $prio = (int) $v('priority', '3');
+    $escal = $post !== null ? !empty($post['nag_escalate']) : (!$r || (int) $r['nag_escalate'] === 1);
+    $endKind = $post !== null ? (string) ($post['end_kind'] ?? 'never')
+        : ($r && $r['end_date'] ? 'date' : ($r && $r['max_count'] ? 'count' : 'never'));
     ?>
     <form method="post" class="form rp-form" data-rappel>
       <?= csrf_field() ?>
@@ -170,12 +190,25 @@ function rappel_form(?array $r, ?array $post): void
             <?php endforeach; ?>
           </select></label>
         <label class="field"><span>Type</span>
-          <select name="nag_every">
+          <select name="nag_every" data-ctl>
             <option value="0">Normal : une notification</option>
             <?php foreach (RAPPEL_RELANCES as $n => $label): ?>
               <option value="<?= $n ?>" <?= $n === (int) $v('nag_every', '0') ? 'selected' : '' ?>>🔁 Insistant : <?= e($label) ?></option>
             <?php endforeach; ?>
           </select></label>
+      </div>
+      <label class="check" data-if="nag_every:5 10 15 30 60"><input type="checkbox" name="nag_escalate" value="1" <?= $escal ? 'checked' : '' ?>> 🚨 Passer en « Urgente » à la <?= RAPPEL_ESCALADE ?>e relance (sonne même en silencieux)</label>
+      <div class="rp-row" data-show="daily weekly monthly yearly interval">
+        <label class="field"><span>Fin</span>
+          <select name="end_kind" data-ctl>
+            <option value="never" <?= $endKind === 'never' ? 'selected' : '' ?>>Jamais</option>
+            <option value="date" <?= $endKind === 'date' ? 'selected' : '' ?>>Jusqu'à une date</option>
+            <option value="count" <?= $endKind === 'count' ? 'selected' : '' ?>>Après un nombre d'envois</option>
+          </select></label>
+        <label class="field" data-if="end_kind:date"><span>Dernier jour</span>
+          <input type="date" name="end_date" value="<?= e($v('end_date')) ?>"></label>
+        <label class="field" data-if="end_kind:count"><span>Nombre d'envois</span>
+          <input type="number" name="max_count" min="1" max="1000" value="<?= e($v('max_count', '10')) ?>"></label>
       </div>
       <div class="rp-row">
         <label class="field"><span>Sujet ntfy <em>seulement pour ce rappel</em></span>
@@ -222,15 +255,22 @@ page_start('Rappels', $me, 'rappels');
 </section>
 
 <section class="panel" id="sujet">
-  <form method="post" class="ct-form">
+  <form method="post" class="form rp-form">
     <?= csrf_field() ?><input type="hidden" name="action" value="topic_save">
     <label class="field"><span>Sujet ntfy de tous mes rappels</span>
       <input name="rappel_topic" value="<?= e($me['rappel_topic']) ?>" maxlength="64" pattern="[A-Za-z0-9_\-]{1,64}" spellcheck="false" autocomplete="off"
              placeholder="<?= e(setting('ntfy_topic') ?: 'portail-rappels') ?> (celui du portail)"></label>
+    <label class="check"><input type="checkbox" name="quiet_on" value="1" data-quiet <?= $me['quiet_start'] !== '' ? 'checked' : '' ?>> 🌙 Heures de silence</label>
+    <div class="rp-row rp-quiet">
+    <label class="field"><span>De</span><input type="time" name="quiet_start" value="<?= e($me['quiet_start'] ?: '23:00') ?>"></label>
+    <label class="field"><span>À</span><input type="time" name="quiet_end" value="<?= e($me['quiet_end'] ?: '07:00') ?>"></label>
+    </div>
+    <div class="ct-actions">
     <button class="btn btn-ghost btn-sm" type="submit">Enregistrer</button>
     <button class="btn btn-ghost btn-sm" type="submit" name="test" value="1"><?= icon('bell') ?> Enregistrer et tester</button>
+    </div>
   </form>
-  <p class="muted small rp-hint">Vide : les rappels arrivent sur le même sujet que les alertes du portail. Abonne-toi à ce sujet dans l'app ntfy de ton téléphone.</p>
+  <p class="muted small rp-hint">Sujet vide : les rappels arrivent sur le même sujet que les alertes du portail. Pendant les heures de silence, seuls les rappels réglés en « Urgente » partent ; les autres attendent la fin et arrivent avec leur heure d'origine.</p>
 </section>
 
 <section class="panel panel-accent" id="nouveau">
@@ -244,7 +284,7 @@ page_start('Rappels', $me, 'rappels');
 <div class="ct-list">
 <?php foreach ($list as $r):
     $on   = (int) $r['enabled'] === 1;
-    $done = !$on && $r['kind'] === 'once' && $r['last_sent_at'];
+    $done = !$on && $r['next_at'] === null && $r['last_sent_at'];
     $edit = $retry && (int) $retry['id'] === (int) $r['id'];
     $wait = $on && $r['pending_since'] !== null;
     ?>
@@ -262,11 +302,15 @@ page_start('Rappels', $me, 'rappels');
       <form method="post" class="rp-ack">
         <?= csrf_field() ?><input type="hidden" name="action" value="ack"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
         <button class="btn btn-primary" type="submit">✅ C'est fait</button>
+        <?php foreach (RAPPEL_REPORTS as $code => $label): ?>
+          <button class="btn btn-ghost btn-sm" type="submit" name="a" value="<?= e($code) ?>">⏰ <?= e($label) ?></button>
+        <?php endforeach; ?>
         <span class="small">Prévu <?= e(rappel_when((int) $r['pending_since'])) ?><?= (int) $r['nag_count'] ? ' · relancé ' . (int) $r['nag_count'] . ' fois' : '' ?> · prochaine relance <?= e(substr(rappel_when((int) $r['nag_next']), -5)) ?></span>
       </form>
     <?php endif; ?>
     <p class="ct-sum">
       <?php if ($on && $r['next_at'] === null): ?><span class="muted">Pas d'autre envoi prévu après celui-ci</span><?php elseif ($on): ?>Prochain envoi : <strong><?= e(rappel_when((int) $r['next_at'])) ?></strong><?php else: ?><span class="muted"><?= $done ? 'Envoyé' : 'Aucun envoi tant qu\'il est en pause' ?></span><?php endif; ?>
+      <?php if ($r['snooze_at']): ?><br><span class="small rp-snz">⏰ Reporté : revient <?= e(rappel_when((int) $r['snooze_at'])) ?></span><?php endif; ?>
       <?php if ($r['last_sent_at'] && !$done): ?><br><span class="muted small">Dernier envoi : <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
       <?php if ($done): ?><span class="muted"> le <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
       <?php if ($r['topic'] !== ''): ?><br><span class="muted small">Sujet ntfy de ce rappel : <span class="mono"><?= e($r['topic']) ?></span></span><?php endif; ?>

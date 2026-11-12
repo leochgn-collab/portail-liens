@@ -83,6 +83,26 @@
     };
     sel.addEventListener('change', sync);
     sync();
+    // Champs liés à un autre choix : data-if="nom:valeur1 valeur2"
+    var ifs = function () {
+      f.querySelectorAll('[data-if]').forEach(function (el) {
+        var p = el.getAttribute('data-if').split(':'), c = f.querySelector('[name="' + p[0] + '"]');
+        var on = !!c && p[1].split(' ').indexOf(c.value) !== -1;
+        el.hidden = !on;
+        el.querySelectorAll('input').forEach(function (i) { i.disabled = !on; });
+      });
+    };
+    f.querySelectorAll('[data-ctl]').forEach(function (c) { c.addEventListener('change', ifs); });
+    ifs();
+  });
+
+  // Heures de silence : champs affichés seulement si la case est cochée
+  document.querySelectorAll('input[data-quiet]').forEach(function (cb) {
+    var sync = function () {
+      cb.form.querySelectorAll('.rp-quiet').forEach(function (el) { el.hidden = !cb.checked; });
+    };
+    cb.addEventListener('change', sync);
+    sync();
   });
 
   // ── Notification éphémère ──
