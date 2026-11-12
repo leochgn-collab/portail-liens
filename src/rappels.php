@@ -372,6 +372,8 @@ function rappel_ack(array $r, ?int $userId, string $how): void
     db()->prepare('UPDATE reminders SET pending_since = NULL, nag_next = NULL, nag_count = 0,
             enabled = CASE WHEN next_at IS NULL THEN 0 ELSE enabled END WHERE id = ?')->execute([$r['id']]);
     log_event($userId ?? (int) $r['user_id'], "Rappel « {$r['title']} » validé ($how)");
+    $next = $r['next_at'] ? ' Prochain : ' . rappel_when((int) $r['next_at']) . '.' : '';
+    ntfy_send((string) $r['title'], "✅ Validé, plus de relance.$next", 2, ['white_check_mark'], rappel_topic($r));
 }
 
 /** Reporte le rappel : un rappel insistant en attente reprend ses relances à cette heure-là. */
@@ -383,6 +385,7 @@ function rappel_snooze(array $r, int $until, ?int $userId, string $how = 'depuis
         db()->prepare('UPDATE reminders SET snooze_at = ? WHERE id = ?')->execute([$until, $r['id']]);
     }
     log_event($userId ?? (int) $r['user_id'], "Rappel « {$r['title']} » reporté " . rappel_when($until) . " ($how)");
+    ntfy_send((string) $r['title'], 'Reporté : il revient ' . rappel_when($until) . '.', 2, ['alarm_clock'], rappel_topic($r));
 }
 
 /** Envoie les rappels arrivés à échéance, les reports et les relances (appelé chaque minute par bin/rappels.php). */
