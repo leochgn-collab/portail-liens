@@ -42,6 +42,7 @@ function icon(string $name): string
         'copy'   => '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>',
         'server' => '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
         'power'  => '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1011.4 0"/>',
+        'bell'   => '<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15L6 16z"/><path d="M10 20.5a2 2 0 004 0"/>',
         'key'    => '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M17 6l3 3"/>',
     ];
     return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' . ($paths[$name] ?? '') . '</svg>';
@@ -53,10 +54,11 @@ function page_start(string $title, array $user, string $active): void
     send_security_headers();
     $nav = [
         ['/', 'Tableau de bord', 'grid', 'dashboard'],
+        ['/rappels.php', 'Rappels', 'bell', 'rappels'],
         ['/compte.php', 'Mon compte', 'user', 'compte'],
     ];
     if ($user['is_admin']) {
-        array_splice($nav, 1, 0, [
+        array_splice($nav, 2, 0, [
             ['/conteneurs.php', 'Conteneurs', 'server', 'conteneurs'],
             ['/admin.php', 'Administration', 'shield', 'admin'],
         ]);

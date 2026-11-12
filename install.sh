@@ -84,9 +84,11 @@ EOF
   a2enconf -q zz-portail-durcissement >/dev/null
 }
 
-# Planificateur des plages horaires des conteneurs Proxmox (page « Conteneurs »).
+# Tâches lancées chaque minute : plages horaires des conteneurs Proxmox (page « Conteneurs »)
+# et envoi des rappels (page « Rappels »).
 installer_cron() {
-  echo "* * * * * www-data php $DIR/bin/scheduler.php" > /etc/cron.d/portail-ct
+  printf '%s\n' "* * * * * www-data php $DIR/bin/scheduler.php" \
+    "* * * * * www-data php $DIR/bin/rappels.php" > /etc/cron.d/portail-ct
   chmod 644 /etc/cron.d/portail-ct
 }
 

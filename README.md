@@ -104,6 +104,17 @@ install.sh   installation et mise à jour
 
 MIT. Le générateur de QR code (`public/assets/qrcode.js`) est de Kazuhiko Arase, sous licence MIT.
 
+## Page « Rappels »
+
+Chaque compte peut programmer ses propres rappels, envoyés en notification sur ntfy (serveur réglé dans l'administration) :
+
+- **une seule fois**, à une date et une heure précises ;
+- **tous les jours**, **chaque semaine** (jours au choix, ex. du lundi au vendredi), **chaque mois** (le 31 tombe le dernier jour des mois plus courts), **chaque année** ou **tous les N jours**.
+
+Pour chaque rappel : un message facultatif, une priorité ntfy et, si besoin, un autre sujet ntfy que celui du portail (pratique pour envoyer les rappels d'un autre compte sur son propre téléphone). Bouton « Tester » pour un envoi immédiat, pause et reprise.
+
+L'envoi est fait chaque minute par cron (`bin/rappels.php`, dans `/etc/cron.d/portail-ct`, créé par `install.sh`). Si le serveur était éteint à l'heure prévue, le rappel part au redémarrage avec l'heure d'origine. Si ntfy est injoignable, nouvel essai chaque minute et une seule ligne au journal.
+
 ## Page « Conteneurs » (Proxmox)
 
 Les administrateurs peuvent démarrer et arrêter proprement leurs CT Proxmox, et programmer des plages d'extinction (ex. éteint de 23:00 à 07:00), affichées sur une frise de 24 h. Le planificateur est lancé chaque minute par cron (`/etc/cron.d/portail-ct`, créé par `install.sh`).

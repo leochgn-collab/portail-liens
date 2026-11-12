@@ -609,3 +609,26 @@ form[data-autosubmit] .seg { max-width: 380px; }
 @media (max-width: 420px) { .stats-3 { grid-template-columns: 1fr 1fr; } }
 .badge-new { background: rgba(var(--accent-rgb), .2); color: #fff; border-color: rgba(var(--accent-rgb), .5); box-shadow: 0 0 12px rgba(var(--accent-rgb), .6); }
 .ct-new { border-color: rgba(var(--accent-rgb), .55); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(var(--accent-rgb), .25), 0 14px 40px -14px rgba(var(--accent-rgb), .7); }
+/* ── Page Rappels ── */
+.rp-off::before { background: none; }
+.rp-off .ct-ic { filter: grayscale(1); opacity: .6; }
+.rp .ct-title .host { white-space: normal; color: var(--muted); font-size: 13px; }
+.rp-msg { margin: 0; font-size: 13.5px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+.rp .alert { margin: 0; padding: 8px 12px; }
+.ct-edit summary .ic { width: 15px; height: 15px; vertical-align: -3px; margin-right: 4px; }
+#nouveau .ct-edit summary { font-size: 15px; }
+.rp-form { gap: 12px; }
+.rp-form textarea { min-height: 64px; }
+.rp-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.rp-row .field { flex: 1 1 150px; }
+.rp-row[hidden], [data-show][hidden] { display: none; }
+.rp-days { border: 0; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.rp-days legend { font-size: 13px; font-weight: 550; color: var(--muted); margin-bottom: 7px; padding: 0; }
+.rp-day { position: relative; cursor: pointer; flex: 1 1 0; min-width: 0; max-width: 56px; }
+.rp-day input { position: absolute; opacity: 0; pointer-events: none; }
+.rp-day span {
+  display: grid; place-items: center; width: 100%; height: 38px; border-radius: 11px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line-2); background: var(--panel-2); color: var(--muted); transition: all .15s;
+}
+.rp-day input:checked + span { background: rgba(var(--accent-rgb), .25); border-color: rgba(var(--accent-rgb), .6); color: #fff; }
+.rp-day input:focus-visible + span { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .25); }

@@ -7,6 +7,7 @@ define('DATA_DIR', ROOT . '/data');
 require __DIR__ . '/config.php';
 require __DIR__ . '/totp.php';
 require __DIR__ . '/proxmox.php';
+require __DIR__ . '/rappels.php';
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -117,6 +118,26 @@ function migrate(PDO $pdo): void
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS reminders (
+            id           INTEGER PRIMARY KEY,
+            user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title        TEXT NOT NULL,
+            message      TEXT NOT NULL DEFAULT '',
+            kind         TEXT NOT NULL,
+            at_time      TEXT NOT NULL,
+            on_date      TEXT,
+            weekdays     TEXT,
+            month_day    INTEGER,
+            every_n      INTEGER,
+            priority     INTEGER NOT NULL DEFAULT 3,
+            topic        TEXT NOT NULL DEFAULT '',
+            enabled      INTEGER NOT NULL DEFAULT 1,
+            next_at      INTEGER,
+            last_sent_at INTEGER,
+            last_error   TEXT NOT NULL DEFAULT '',
+            created_at   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS reminders_due ON reminders(enabled, next_at);
         CREATE TABLE IF NOT EXISTS bans (
             ip      TEXT PRIMARY KEY,
             level   INTEGER NOT NULL,
@@ -406,8 +427,11 @@ function ntfy_configured(): bool
     return setting('ntfy_url') !== '' && setting('ntfy_topic') !== '';
 }
 
-/** Envoie tout de suite une notification. Retourne null si c'est bon, sinon le message d'erreur. */
-function ntfy_send(string $title, string $message, int $priority = 3, array $tags = []): ?string
+/**
+ * Envoie tout de suite une notification (sur le sujet du portail, ou sur $topic).
+ * Retourne null si c'est bon, sinon le message d'erreur.
+ */
+function ntfy_send(string $title, string $message, int $priority = 3, array $tags = [], ?string $topic = null): ?string
 {
     if (!ntfy_configured()) {
         return 'Serveur ntfy non configuré.';
@@ -423,7 +447,7 @@ function ntfy_send(string $title, string $message, int $priority = 3, array $tag
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode([
-            'topic'    => setting('ntfy_topic'),
+            'topic'    => $topic ?? setting('ntfy_topic'),
             'title'    => $title,
             'message'  => $message,
             'priority' => $priority,

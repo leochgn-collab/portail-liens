@@ -67,6 +67,24 @@
     });
   });
 
+  // ── Rappels : n'afficher que les champs utiles à la fréquence choisie ──
+  document.querySelectorAll('form[data-rappel]').forEach(function (f) {
+    var sel = f.querySelector('[data-freq]');
+    if (!sel) return;
+    var sync = function () {
+      var k = sel.value;
+      f.querySelectorAll('[data-show]').forEach(function (el) {
+        var on = el.getAttribute('data-show').split(' ').indexOf(k) !== -1;
+        el.hidden = !on;
+        el.querySelectorAll('input').forEach(function (i) { i.disabled = !on; });
+      });
+      f.querySelectorAll('.rp-row').forEach(function (row) { row.hidden = !row.querySelector('.field:not([hidden])'); });
+      f.querySelectorAll('[data-lbl-' + k + ']').forEach(function (el) { el.textContent = el.getAttribute('data-lbl-' + k); });
+    };
+    sel.addEventListener('change', sync);
+    sync();
+  });
+
   // ── Notification éphémère ──
   var toast = document.querySelector('.toast');
   if (toast) setTimeout(function () { toast.classList.add('hide'); }, 5000);
