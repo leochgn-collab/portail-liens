@@ -263,7 +263,8 @@ function rappel_actions(array $r): array
         return [];
     }
     $ack = $base . '/rappel-ok.php?id=' . (int) $r['id'] . '&k=' . rappel_ack_token($r);
-    return ['actions' => [
+    // « click » : toucher la notification ouvre aussi la page de validation (si les boutons ne s'affichent pas).
+    return ['click' => $ack, 'actions' => [
         ['action' => 'http', 'label' => "✅ C'est fait", 'url' => $ack, 'method' => 'POST', 'clear' => true],
         ['action' => 'view', 'label' => 'Ouvrir', 'url' => $ack],
     ]];
