@@ -4,7 +4,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 
 $me  = require_login();
 $uid = (int) $me['id'];
-remember_portal_url();
+remember_portal_url($me);
 
 /** Rappel de l'utilisateur connecté (jamais celui d'un autre compte). */
 function my_reminder(int $id, int $uid): ?array

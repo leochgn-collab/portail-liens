@@ -12,6 +12,7 @@ if (too_many_attempts('ack', client_ip(), 60)) {
     http_response_code(429);
     exit('Trop de demandes, réessaie dans quelques minutes.');
 }
+record_attempt('ack', client_ip()); // chaque appel compte : un lien valide ne peut pas servir à inonder ntfy
 
 $id   = (int) ($_REQUEST['id'] ?? 0);
 $key  = (string) ($_REQUEST['k'] ?? '');
@@ -26,7 +27,6 @@ $ua  = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
 $via = 'depuis la notification · ' . (preg_match('/ntfy[^ ]*/i', $ua, $m) ? $m[0] : (preg_match('/iPhone|Android|Windows|Mac/', $ua, $m) ? 'navigateur ' . $m[0] : 'appareil inconnu'));
 
 if (!$r || !preg_match('/^[a-f0-9]{40}$/', $key) || !hash_equals(rappel_token($r), $key)) {
-    record_attempt('ack', client_ip());
     $state = 'bad';
 } elseif ($post && $act === 'done') {
     if ($r['pending_since'] !== null) {

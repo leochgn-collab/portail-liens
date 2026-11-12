@@ -285,12 +285,16 @@ function portal_url(): string
     return rtrim(APP_URL !== '' ? APP_URL : setting('portal_url'), '/');
 }
 
-/** Retient l'adresse du portail telle que le navigateur l'utilise (le planificateur ne la connaît pas). */
-function remember_portal_url(): void
+/**
+ * Retient l'adresse du portail telle que le navigateur d'un administrateur l'utilise (le planificateur
+ * ne la connaît pas). Réservé aux administrateurs : un autre compte pourrait sinon envoyer un faux
+ * en-tête Host et détourner les liens des boutons de tous les rappels vers son propre site.
+ */
+function remember_portal_url(array $user): void
 {
     $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    if (APP_URL !== '' || !preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/', $host)) {
-        return;
+    if (APP_URL !== '' || !$user['is_admin'] || !preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/', $host) || is_private_host($host)) {
+        return; // seulement un vrai nom de domaine public (pas une IP locale ni un port)
     }
     $url = (is_https() ? 'https://' : 'http://') . $host;
     if (setting('portal_url') !== $url) {
