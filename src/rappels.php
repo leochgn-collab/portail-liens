@@ -375,14 +375,14 @@ function rappel_ack(array $r, ?int $userId, string $how): void
 }
 
 /** Reporte le rappel : un rappel insistant en attente reprend ses relances à cette heure-là. */
-function rappel_snooze(array $r, int $until, ?int $userId): void
+function rappel_snooze(array $r, int $until, ?int $userId, string $how = 'depuis le portail'): void
 {
     if ($r['pending_since'] !== null) {
         db()->prepare('UPDATE reminders SET nag_next = ? WHERE id = ?')->execute([$until, $r['id']]);
     } else {
         db()->prepare('UPDATE reminders SET snooze_at = ? WHERE id = ?')->execute([$until, $r['id']]);
     }
-    log_event($userId ?? (int) $r['user_id'], "Rappel « {$r['title']} » reporté " . rappel_when($until));
+    log_event($userId ?? (int) $r['user_id'], "Rappel « {$r['title']} » reporté " . rappel_when($until) . " ($how)");
 }
 
 /** Envoie les rappels arrivés à échéance, les reports et les relances (appelé chaque minute par bin/rappels.php). */
@@ -414,6 +414,7 @@ function rappels_run(int $now): void
                     pending_since = ?, nag_next = ?, nag_count = 0, snooze_at = NULL WHERE id = ?')
                 ->execute([$now, $next, $next === null && !$nag ? 0 : 1, $r['sent_count'],
                     $nag ? $r['pending_since'] : null, $nag ? $now + 60 * (int) $r['nag_every'] : null, $r['id']]);
+            log_event((int) $r['user_id'], "Rappel « {$r['title']} » envoyé sur « " . (rappel_topic($r) ?? setting('ntfy_topic')) . ' »');
         } elseif ($r['last_error'] !== $err) {
             // Nouvel essai chaque minute, mais une seule ligne au journal par erreur.
             db()->prepare('UPDATE reminders SET last_error = ? WHERE id = ?')->execute([$err, $r['id']]);
@@ -453,6 +454,7 @@ function rappels_run(int $now): void
         if (rappel_send($r, ($up ? '🚨 ' : '🔁 ') . $r['title'], $msg, ['repeat'], true, $up ? 5 : null) === null) {
             db()->prepare('UPDATE reminders SET nag_count = ?, nag_next = ? WHERE id = ?')
                 ->execute([$n, $now + 60 * (int) $r['nag_every'], $r['id']]);
+            log_event((int) $r['user_id'], "Rappel « {$r['title']} » : relance n°$n envoyée" . ($up ? ' (urgente)' : ''));
         }
         // En cas d'échec, nag_next ne bouge pas : nouvel essai à la minute suivante.
     }

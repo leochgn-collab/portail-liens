@@ -12,7 +12,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 
 $h = fn (?int $t) => $t ? date('d/m H:i:s', $t) : '-';
 echo '== Heure du serveur : ', date('d/m/Y H:i:s T'), "\n";
-echo '== Version : ', trim((string) shell_exec('git -C ' . escapeshellarg(ROOT) . ' log -1 --format="%h %cd" --date=format:"%d/%m %H:%M" 2>/dev/null')), "\n";
+echo '== Version : ', trim((string) shell_exec('git -c safe.directory=' . escapeshellarg(ROOT) . ' -C ' . escapeshellarg(ROOT) . ' log -1 --format="%h %cd" --date=format:"%d/%m %H:%M" 2>/dev/null')), "\n";
 echo '== Cron : ', is_file('/etc/cron.d/portail-ct') ? str_replace("\n", ' | ', trim((string) file_get_contents('/etc/cron.d/portail-ct'))) : 'FICHIER ABSENT', "\n";
 echo '== Service cron : ', trim((string) shell_exec('systemctl is-active cron 2>&1')), "\n";
 echo '== ntfy : ', ntfy_configured() ? setting('ntfy_url') . ' · sujet portail « ' . setting('ntfy_topic') . ' »' : 'NON CONFIGURÉ', "\n";

@@ -16,18 +16,21 @@ $st   = db()->prepare(RAPPEL_SELECT . ' WHERE r.id = ?');
 $st->execute([$id]);
 $r    = $st->fetch() ?: null;
 $done = null;
+// Qui appelle le lien (application ntfy iPhone/Android, navigateur…) : noté au journal.
+$ua  = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+$via = 'depuis la notification · ' . (preg_match('/ntfy[^ ]*/i', $ua, $m) ? $m[0] : (preg_match('/iPhone|Android|Windows|Mac/', $ua, $m) ? 'navigateur ' . $m[0] : 'appareil inconnu'));
 
 if (!$r || !preg_match('/^[a-f0-9]{40}$/', $key) || !hash_equals(rappel_token($r), $key)) {
     login_failed('ack', client_ip(), null, 'Lien de rappel invalide');
     $state = 'bad';
 } elseif ($post && $act === 'done') {
     if ($r['pending_since'] !== null) {
-        rappel_ack($r, null, 'depuis la notification');
+        rappel_ack($r, null, $via . (isset($_POST['page']) ? ', page de validation' : ', bouton'));
     }
     $state = 'ok';
     $done  = "« {$r['title']} » est validé : plus de relance.";
 } elseif ($post && ($until = rappel_report_until($act, time())) !== null) {
-    rappel_snooze($r, $until, null);
+    rappel_snooze($r, $until, null, $via);
     $state = 'ok';
     $done  = "« {$r['title']} » revient " . rappel_when($until) . '.';
 } else {
