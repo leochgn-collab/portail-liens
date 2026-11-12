@@ -16,6 +16,9 @@ const RAPPEL_FREQS = [
 const RAPPEL_JOURS = [1 => 'lun', 2 => 'mar', 3 => 'mer', 4 => 'jeu', 5 => 'ven', 6 => 'sam', 7 => 'dim'];
 const RAPPEL_PRIOS = [1 => 'Très basse (silencieuse)', 2 => 'Basse', 3 => 'Normale', 4 => 'Haute', 5 => 'Urgente'];
 const RAPPEL_MAX_PAR_COMPTE = 200;
+// Rappels insistants : intervalle de relance proposé (minutes) et durée maximale des relances.
+const RAPPEL_RELANCES = [5 => 'toutes les 5 min', 10 => 'toutes les 10 min', 15 => 'toutes les 15 min', 30 => 'toutes les 30 min', 60 => 'toutes les heures'];
+const RAPPEL_RELANCE_MAX = 24 * 3600;
 
 function rappel_tz(): DateTimeZone
 {
@@ -169,7 +172,11 @@ function rappel_from_post(array $p): array
         'every_n'   => null,
         'priority'  => (int) ($p['priority'] ?? 3),
         'topic'     => $topic,
+        'nag_every' => (int) ($p['nag_every'] ?? 0),
     ];
+    if (!isset(RAPPEL_RELANCES[$data['nag_every']])) {
+        $data['nag_every'] = 0;
+    }
     if ($title === '' || mb_strlen($title) > 100) {
         return [null, 'Donne un titre au rappel (100 caractères au maximum).'];
     }
@@ -223,7 +230,59 @@ function rappel_from_post(array $p): array
     return [$data, null];
 }
 
-/** Envoie les rappels arrivés à échéance (appelé chaque minute par bin/rappels.php). */
+/** Adresse publique du portail (pour les boutons des notifications), ou '' si inconnue. */
+function portal_url(): string
+{
+    return rtrim(APP_URL !== '' ? APP_URL : setting('portal_url'), '/');
+}
+
+/** Retient l'adresse du portail telle que le navigateur l'utilise (le planificateur ne la connaît pas). */
+function remember_portal_url(): void
+{
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if (APP_URL !== '' || !preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/', $host)) {
+        return;
+    }
+    $url = (is_https() ? 'https://' : 'http://') . $host;
+    if (setting('portal_url') !== $url) {
+        set_setting('portal_url', $url);
+    }
+}
+
+/** Jeton du bouton « C'est fait » : valable seulement pour l'occurrence en attente. */
+function rappel_ack_token(array $r): string
+{
+    return substr(hash_hmac('sha256', 'ack|' . $r['id'] . '|' . $r['pending_since'], app_key()), 0, 40);
+}
+
+/** Boutons ajoutés à la notification d'un rappel insistant. */
+function rappel_actions(array $r): array
+{
+    $base = portal_url();
+    if ($base === '' || (int) $r['nag_every'] === 0) {
+        return [];
+    }
+    $ack = $base . '/rappel-ok.php?id=' . (int) $r['id'] . '&k=' . rappel_ack_token($r);
+    return ['actions' => [
+        ['action' => 'http', 'label' => "✅ C'est fait", 'url' => $ack, 'method' => 'POST', 'clear' => true],
+        ['action' => 'view', 'label' => 'Ouvrir', 'url' => $ack],
+    ]];
+}
+
+function rappel_send(array $r, string $title, string $msg, array $tags): ?string
+{
+    return ntfy_send($title, $msg, (int) $r['priority'], $tags, $r['topic'] !== '' ? (string) $r['topic'] : null, rappel_actions($r));
+}
+
+/** Valide l'occurrence en attente : fin des relances. */
+function rappel_ack(array $r, ?int $userId, string $how): void
+{
+    db()->prepare('UPDATE reminders SET pending_since = NULL, nag_next = NULL, nag_count = 0,
+            enabled = CASE WHEN next_at IS NULL THEN 0 ELSE enabled END WHERE id = ?')->execute([$r['id']]);
+    log_event($userId ?? (int) $r['user_id'], "Rappel « {$r['title']} » validé ($how)");
+}
+
+/** Envoie les rappels arrivés à échéance et les relances (appelé chaque minute par bin/rappels.php). */
 function rappels_run(int $now): void
 {
     $st = db()->prepare('SELECT * FROM reminders WHERE enabled = 1 AND next_at IS NOT NULL AND next_at <= ? ORDER BY next_at');
@@ -234,17 +293,43 @@ function rappels_run(int $now): void
         if ($late > 300) { // serveur arrêté au moment prévu : on le signale
             $msg .= "\n(prévu " . rappel_when((int) $r['next_at']) . ')';
         }
-        $err = ntfy_send((string) $r['title'], $msg, (int) $r['priority'], ['alarm_clock'],
-            $r['topic'] !== '' ? (string) $r['topic'] : null);
+        $nag = (int) $r['nag_every'] > 0;
+        if ($nag) {
+            // Nouvelle occurrence : elle remplace une éventuelle occurrence précédente jamais validée.
+            $r['pending_since'] = (int) $r['next_at'];
+            $msg .= "\nRelance toutes les " . (int) $r['nag_every'] . " min jusqu'à validation.";
+        }
+        $err = rappel_send($r, (string) $r['title'], $msg, $nag ? ['alarm_clock', 'repeat'] : ['alarm_clock']);
         if ($err === null) {
             // Les envois manqués pendant une panne ne sont pas rattrapés un par un : on repart de maintenant.
             $next = rappel_next($r, max($now, (int) $r['next_at']));
-            db()->prepare('UPDATE reminders SET last_sent_at = ?, next_at = ?, enabled = ?, last_error = \'\' WHERE id = ?')
-                ->execute([$now, $next, $next === null ? 0 : 1, $r['id']]);
+            db()->prepare('UPDATE reminders SET last_sent_at = ?, next_at = ?, enabled = ?, last_error = \'\',
+                    pending_since = ?, nag_next = ?, nag_count = 0 WHERE id = ?')
+                ->execute([$now, $next, $next === null && !$nag ? 0 : 1,
+                    $nag ? $r['pending_since'] : null, $nag ? $now + 60 * (int) $r['nag_every'] : null, $r['id']]);
         } elseif ($r['last_error'] !== $err) {
             // Nouvel essai chaque minute, mais une seule ligne au journal par erreur.
             db()->prepare('UPDATE reminders SET last_error = ? WHERE id = ?')->execute([$err, $r['id']]);
             log_event((int) $r['user_id'], "Rappel « {$r['title']} » non envoyé : $err");
         }
+    }
+
+    // Relances des rappels insistants pas encore validés.
+    $st = db()->prepare('SELECT * FROM reminders WHERE enabled = 1 AND pending_since IS NOT NULL AND nag_next <= ?');
+    $st->execute([$now]);
+    foreach ($st->fetchAll() as $r) {
+        if ($now - (int) $r['pending_since'] > RAPPEL_RELANCE_MAX) {
+            db()->prepare('UPDATE reminders SET pending_since = NULL, nag_next = NULL, nag_count = 0,
+                    enabled = CASE WHEN next_at IS NULL THEN 0 ELSE enabled END WHERE id = ?')->execute([$r['id']]);
+            log_event((int) $r['user_id'], "Rappel « {$r['title']} » : relances arrêtées après 24 h sans validation");
+            continue;
+        }
+        $n   = (int) $r['nag_count'] + 1;
+        $msg = ($r['message'] !== '' ? $r['message'] . "\n" : '') . "Relance n°$n · prévu " . rappel_when((int) $r['pending_since']) . ', pas encore validé.';
+        if (rappel_send($r, '🔁 ' . $r['title'], $msg, ['repeat']) === null) {
+            db()->prepare('UPDATE reminders SET nag_count = ?, nag_next = ? WHERE id = ?')
+                ->execute([$n, $now + 60 * (int) $r['nag_every'], $r['id']]);
+        }
+        // En cas d'échec, nag_next ne bouge pas : nouvel essai à la minute suivante.
     }
 }

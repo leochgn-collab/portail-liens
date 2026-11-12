@@ -4,6 +4,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 
 $me  = require_login();
 $uid = (int) $me['id'];
+remember_portal_url();
 
 /** Rappel de l'utilisateur connecté (jamais celui d'un autre compte). */
 function my_reminder(int $id, int $uid): ?array
@@ -37,19 +38,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $enabled = $action === 'create' || isset($_POST['enabled']) ? 1 : 0;
         $next = rappel_next($data, time());
         $cols = [$data['title'], $data['message'], $data['kind'], $data['at_time'], $data['on_date'], $data['weekdays'],
-                 $data['month_day'], $data['every_n'], $data['priority'], $data['topic'], $enabled, $next];
+                 $data['month_day'], $data['every_n'], $data['priority'], $data['topic'], $enabled, $next, $data['nag_every']];
         if ($action === 'create') {
             db()->prepare('INSERT INTO reminders (title, message, kind, at_time, on_date, weekdays, month_day, every_n,
-                    priority, topic, enabled, next_at, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    priority, topic, enabled, next_at, nag_every, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
                 ->execute([...$cols, $uid, time()]);
             $id = (int) db()->lastInsertId();
             log_event($uid, "Rappel créé : « {$data['title']} »");
             $msg = 'Rappel enregistré · prochain envoi ' . rappel_when($next) . '.';
         } else {
             db()->prepare('UPDATE reminders SET title = ?, message = ?, kind = ?, at_time = ?, on_date = ?, weekdays = ?,
-                    month_day = ?, every_n = ?, priority = ?, topic = ?, enabled = ?, next_at = ?, last_error = \'\'
+                    month_day = ?, every_n = ?, priority = ?, topic = ?, enabled = ?, next_at = ?, nag_every = ?, last_error = \'\'
                     WHERE id = ? AND user_id = ?')
                 ->execute([...$cols, $id, $uid]);
+            if (!$enabled || $data['nag_every'] === 0) { // plus insistant ou en pause : fin des relances
+                db()->prepare('UPDATE reminders SET pending_since = NULL, nag_next = NULL, nag_count = 0 WHERE id = ?')->execute([$id]);
+            }
             $msg = 'Rappel modifié' . ($enabled && $next ? ' · prochain envoi ' . rappel_when($next) : '') . '.';
         }
     } elseif ($r && $action === 'toggle') {
@@ -59,9 +63,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $msg = 'Ce rappel est déjà passé : modifie sa date pour le réactiver.';
         } else {
             // En le réactivant, on repart de maintenant : pas de rafale d'envois en retard.
-            db()->prepare('UPDATE reminders SET enabled = ?, next_at = ?, last_error = \'\' WHERE id = ?')->execute([$on, $next, $r['id']]);
+            db()->prepare('UPDATE reminders SET enabled = ?, next_at = ?, last_error = \'\', pending_since = NULL, nag_next = NULL, nag_count = 0
+                WHERE id = ?')->execute([$on, $next, $r['id']]);
             $msg = $on ? 'Rappel réactivé · prochain envoi ' . rappel_when($next) . '.' : 'Rappel mis en pause.';
         }
+    } elseif ($r && $action === 'ack') {
+        if ($r['pending_since'] !== null) {
+            rappel_ack($r, $uid, 'depuis le portail');
+        }
+        $msg = '✅ Rappel validé : plus de relance.';
     } elseif ($r && $action === 'test') {
         $err = ntfy_send($r['title'], ($r['message'] !== '' ? $r['message'] : 'Rappel') . "\n(test)", (int) $r['priority'],
             ['alarm_clock'], $r['topic'] !== '' ? $r['topic'] : null);
@@ -79,12 +89,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 $retry = $_SESSION['rappel_form'] ?? null;
 unset($_SESSION['rappel_form']);
 
-$st = db()->prepare('SELECT * FROM reminders WHERE user_id = ? ORDER BY enabled DESC, next_at IS NULL, next_at, id');
+$st = db()->prepare('SELECT * FROM reminders WHERE user_id = ? ORDER BY pending_since IS NULL, enabled DESC, next_at IS NULL, next_at, id');
 $st->execute([$uid]);
 $list    = $st->fetchAll();
 $active  = array_filter($list, fn ($r) => (int) $r['enabled'] === 1);
+$active  = array_filter($active, fn ($r) => $r['next_at'] !== null);
 $soon    = $active ? min(array_map(fn ($r) => (int) $r['next_at'], $active)) : null;
-$nRecur  = count(array_filter($active, fn ($r) => $r['kind'] !== 'once'));
+$pending = array_filter($list, fn ($r) => $r['pending_since'] !== null && (int) $r['enabled'] === 1);
 
 /** Formulaire de création ou de modification d'un rappel. */
 function rappel_form(?array $r, ?array $post): void
@@ -142,6 +153,15 @@ function rappel_form(?array $r, ?array $post): void
               <option value="<?= $p ?>" <?= $p === $prio ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
           </select></label>
+        <label class="field"><span>Type</span>
+          <select name="nag_every">
+            <option value="0">Normal : une notification</option>
+            <?php foreach (RAPPEL_RELANCES as $n => $label): ?>
+              <option value="<?= $n ?>" <?= $n === (int) $v('nag_every', '0') ? 'selected' : '' ?>>🔁 Insistant : <?= e($label) ?></option>
+            <?php endforeach; ?>
+          </select></label>
+      </div>
+      <div class="rp-row">
         <label class="field"><span>Sujet ntfy <em>facultatif</em></span>
           <input name="topic" value="<?= e($v('topic')) ?>" maxlength="64" pattern="[A-Za-z0-9_\-]{1,64}" spellcheck="false" autocomplete="off"
                  placeholder="<?= e(setting('ntfy_topic') ?: 'celui du portail') ?>"></label>
@@ -177,7 +197,7 @@ page_start('Rappels', $me, 'rappels');
   </div>
   <div class="stat">
     <span class="stat-ic"><?= icon('clock') ?></span>
-    <div><small>Récurrents</small><strong><?= $nRecur ?></strong></div>
+    <div><small>À valider</small><strong><?= count($pending) ?></strong></div>
   </div>
   <div class="stat">
     <span class="stat-ic"><?= icon('pulse') ?></span>
@@ -198,19 +218,27 @@ page_start('Rappels', $me, 'rappels');
     $on   = (int) $r['enabled'] === 1;
     $done = !$on && $r['kind'] === 'once' && $r['last_sent_at'];
     $edit = $retry && (int) $retry['id'] === (int) $r['id'];
+    $wait = $on && $r['pending_since'] !== null;
     ?>
-  <article class="ct rp<?= $on ? ' ct-run' : ' rp-off' ?>" id="r<?= (int) $r['id'] ?>">
+  <article class="ct rp<?= $on ? ' ct-run' : ' rp-off' ?><?= $wait ? ' rp-wait' : '' ?>" id="r<?= (int) $r['id'] ?>">
     <div class="ct-head">
       <span class="ct-ic"><?= icon('bell') ?></span>
       <div class="ct-title">
         <strong><?= e($r['title']) ?><?php if ((int) $r['priority'] >= 4): ?> <span class="badge badge-warn"><?= e(RAPPEL_PRIOS[(int) $r['priority']]) ?></span><?php endif; ?></strong>
-        <span class="host"><?= e(rappel_summary($r)) ?></span>
+        <span class="host"><?= e(rappel_summary($r)) ?><?= (int) $r['nag_every'] ? ' · 🔁 relance ' . e(RAPPEL_RELANCES[(int) $r['nag_every']] ?? '') : '' ?></span>
       </div>
-      <span class="ct-state"><span class="dot <?= $on ? 'up' : '' ?>"></span><?= $on ? 'Actif' : ($done ? 'Terminé' : 'En pause') ?></span>
+      <span class="ct-state"><span class="dot <?= $on ? 'up' : '' ?>"></span><?= $wait ? 'À valider' : ($on ? 'Actif' : ($done ? 'Terminé' : 'En pause')) ?></span>
     </div>
     <?php if ($r['message'] !== ''): ?><p class="rp-msg"><?= nl2br(e($r['message'])) ?></p><?php endif; ?>
+    <?php if ($wait): ?>
+      <form method="post" class="rp-ack">
+        <?= csrf_field() ?><input type="hidden" name="action" value="ack"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+        <button class="btn btn-primary" type="submit">✅ C'est fait</button>
+        <span class="small">Prévu <?= e(rappel_when((int) $r['pending_since'])) ?><?= (int) $r['nag_count'] ? ' · relancé ' . (int) $r['nag_count'] . ' fois' : '' ?> · prochaine relance <?= e(substr(rappel_when((int) $r['nag_next']), -5)) ?></span>
+      </form>
+    <?php endif; ?>
     <p class="ct-sum">
-      <?php if ($on): ?>Prochain envoi : <strong><?= e(rappel_when((int) $r['next_at'])) ?></strong><?php else: ?><span class="muted"><?= $done ? 'Envoyé' : 'Aucun envoi tant qu\'il est en pause' ?></span><?php endif; ?>
+      <?php if ($on && $r['next_at'] === null): ?><span class="muted">Pas d'autre envoi prévu après celui-ci</span><?php elseif ($on): ?>Prochain envoi : <strong><?= e(rappel_when((int) $r['next_at'])) ?></strong><?php else: ?><span class="muted"><?= $done ? 'Envoyé' : 'Aucun envoi tant qu\'il est en pause' ?></span><?php endif; ?>
       <?php if ($r['last_sent_at'] && !$done): ?><br><span class="muted small">Dernier envoi : <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
       <?php if ($done): ?><span class="muted"> le <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
       <?php if ($r['topic'] !== ''): ?><br><span class="muted small">Sujet ntfy : <span class="mono"><?= e($r['topic']) ?></span></span><?php endif; ?>
@@ -242,5 +270,5 @@ page_start('Rappels', $me, 'rappels');
 <?php endforeach; ?>
 </div>
 <?php endif; ?>
-<p class="muted small">Les rappels partent sur ntfy à la minute près. Si le serveur était éteint à l'heure prévue, le rappel part dès son redémarrage avec l'heure d'origine. Un rappel le 29, 30 ou 31 du mois tombe le dernier jour des mois plus courts.</p>
+<p class="muted small">Un rappel 🔁 insistant revient toutes les X minutes jusqu'à ce que tu appuies sur « C'est fait », dans la notification ou ici (24 h au maximum).<?php if (portal_url() === ''): ?> Le bouton dans la notification apparaîtra dès que cette page aura été ouverte depuis l'adresse du portail.<?php endif; ?> Les rappels partent sur ntfy à la minute près. Si le serveur était éteint à l'heure prévue, le rappel part dès son redémarrage avec l'heure d'origine. Un rappel le 29, 30 ou 31 du mois tombe le dernier jour des mois plus courts.</p>
 <?php page_end();

@@ -155,6 +155,14 @@ function migrate(PDO $pdo): void
         $pdo->exec("ALTER TABLE users ADD COLUMN fond TEXT NOT NULL DEFAULT 'anime'");
     }
 
+    // Mise à jour : rappels insistants (relance toutes les N minutes jusqu'à validation).
+    $rcols = array_column($pdo->query('PRAGMA table_info(reminders)')->fetchAll(), 'name');
+    foreach (['nag_every INTEGER NOT NULL DEFAULT 0', 'pending_since INTEGER', 'nag_next INTEGER', 'nag_count INTEGER NOT NULL DEFAULT 0'] as $col) {
+        if (!in_array(strtok($col, ' '), $rcols, true)) {
+            $pdo->exec('ALTER TABLE reminders ADD COLUMN ' . $col);
+        }
+    }
+
     // Mise à jour : type d'accès des liens (public / privé).
     $cols = array_column($pdo->query('PRAGMA table_info(links)')->fetchAll(), 'name');
     if (!in_array('kind', $cols, true)) {
@@ -431,7 +439,7 @@ function ntfy_configured(): bool
  * Envoie tout de suite une notification (sur le sujet du portail, ou sur $topic).
  * Retourne null si c'est bon, sinon le message d'erreur.
  */
-function ntfy_send(string $title, string $message, int $priority = 3, array $tags = [], ?string $topic = null): ?string
+function ntfy_send(string $title, string $message, int $priority = 3, array $tags = [], ?string $topic = null, array $extra = []): ?string
 {
     if (!ntfy_configured()) {
         return 'Serveur ntfy non configuré.';
@@ -452,7 +460,7 @@ function ntfy_send(string $title, string $message, int $priority = 3, array $tag
             'message'  => $message,
             'priority' => $priority,
             'tags'     => $tags,
-        ], JSON_UNESCAPED_UNICODE),
+        ] + $extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 3,

@@ -632,3 +632,7 @@ form[data-autosubmit] .seg { max-width: 380px; }
 }
 .rp-day input:checked + span { background: rgba(var(--accent-rgb), .25); border-color: rgba(var(--accent-rgb), .6); color: #fff; }
 .rp-day input:focus-visible + span { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .25); }
+.rp-wait { border-color: rgba(251,191,36,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 0 0 1px rgba(251,191,36,.25), 0 14px 40px -14px rgba(251,191,36,.55); }
+.rp-wait::before { background: radial-gradient(120% 70% at 0% 0%, rgba(251,191,36,.16), transparent 55%); }
+.rp-wait .ct-state { color: var(--warn); border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.1); }
+.rp-ack { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: #fde68a; }

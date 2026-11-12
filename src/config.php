@@ -21,6 +21,10 @@ date_default_timezone_set(APP_TIMEZONE);
 defined('APP_NAME')     || define('APP_NAME', 'Mon Portail');
 defined('APP_SUBTITLE') || define('APP_SUBTITLE', 'Portail de liens');
 
+// Adresse publique du portail (ex. 'https://leo44.cloud'), utilisée pour le bouton « C'est fait »
+// des rappels insistants. Vide : retenue automatiquement à l'ouverture de la page Rappels.
+defined('APP_URL') || define('APP_URL', '');
+
 // Adresse(s) IP du reverse proxy (Zoraxy, Nginx Proxy Manager…), séparées par des virgules.
 // Seules ces adresses peuvent transmettre l'IP réelle du visiteur et le HTTPS.
 // Laisser vide si Apache est exposé directement sur internet.
