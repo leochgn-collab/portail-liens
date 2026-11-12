@@ -151,6 +151,9 @@ function migrate(PDO $pdo): void
     if (!in_array('theme', $ucols, true)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'bleu'");
     }
+    if (!in_array('rappel_topic', $ucols, true)) { // sujet ntfy de tous les rappels du compte
+        $pdo->exec("ALTER TABLE users ADD COLUMN rappel_topic TEXT NOT NULL DEFAULT ''");
+    }
     if (!in_array('fond', $ucols, true)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN fond TEXT NOT NULL DEFAULT 'anime'");
     }

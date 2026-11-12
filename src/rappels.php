@@ -270,9 +270,23 @@ function rappel_actions(array $r): array
     ]];
 }
 
+/** Sujet ntfy d'un rappel : le sien, sinon celui choisi pour tous les rappels du compte, sinon celui du portail. */
+function rappel_topic(array $r): ?string
+{
+    foreach ([$r['topic'] ?? '', $r['user_topic'] ?? ''] as $t) {
+        if ($t !== '' && $t !== null) {
+            return (string) $t;
+        }
+    }
+    return null;
+}
+
+/** Requête des rappels avec le sujet ntfy de leur compte. */
+const RAPPEL_SELECT = 'SELECT r.*, u.rappel_topic AS user_topic FROM reminders r JOIN users u ON u.id = r.user_id';
+
 function rappel_send(array $r, string $title, string $msg, array $tags): ?string
 {
-    return ntfy_send($title, $msg, (int) $r['priority'], $tags, $r['topic'] !== '' ? (string) $r['topic'] : null, rappel_actions($r));
+    return ntfy_send($title, $msg, (int) $r['priority'], $tags, rappel_topic($r), rappel_actions($r));
 }
 
 /** Valide l'occurrence en attente : fin des relances. */
@@ -286,7 +300,7 @@ function rappel_ack(array $r, ?int $userId, string $how): void
 /** Envoie les rappels arrivés à échéance et les relances (appelé chaque minute par bin/rappels.php). */
 function rappels_run(int $now): void
 {
-    $st = db()->prepare('SELECT * FROM reminders WHERE enabled = 1 AND next_at IS NOT NULL AND next_at <= ? ORDER BY next_at');
+    $st = db()->prepare(RAPPEL_SELECT . ' WHERE r.enabled = 1 AND r.next_at IS NOT NULL AND r.next_at <= ? ORDER BY r.next_at');
     $st->execute([$now]);
     foreach ($st->fetchAll() as $r) {
         $late = $now - (int) $r['next_at'];
@@ -316,7 +330,7 @@ function rappels_run(int $now): void
     }
 
     // Relances des rappels insistants pas encore validés.
-    $st = db()->prepare('SELECT * FROM reminders WHERE enabled = 1 AND pending_since IS NOT NULL AND nag_next <= ?');
+    $st = db()->prepare(RAPPEL_SELECT . ' WHERE r.enabled = 1 AND r.pending_since IS NOT NULL AND r.nag_next <= ?');
     $st->execute([$now]);
     foreach ($st->fetchAll() as $r) {
         if ($now - (int) $r['pending_since'] > RAPPEL_RELANCE_MAX) {

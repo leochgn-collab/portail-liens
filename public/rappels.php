@@ -9,7 +9,7 @@ remember_portal_url();
 /** Rappel de l'utilisateur connecté (jamais celui d'un autre compte). */
 function my_reminder(int $id, int $uid): ?array
 {
-    $st = db()->prepare('SELECT * FROM reminders WHERE id = ? AND user_id = ?');
+    $st = db()->prepare(RAPPEL_SELECT . ' WHERE r.id = ? AND r.user_id = ?');
     $st->execute([$id, $uid]);
     return $st->fetch() ?: null;
 }
@@ -20,6 +20,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $id     = (int) ($_POST['id'] ?? 0);
     $r      = $id ? my_reminder($id, $uid) : null;
     $msg    = null;
+
+    if ($action === 'topic_save') {
+        $t = trim((string) ($_POST['rappel_topic'] ?? ''));
+        if ($t !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $t)) {
+            $msg = 'Sujet ntfy invalide : lettres, chiffres, - et _ uniquement (64 caractères au maximum).';
+        } else {
+            db()->prepare('UPDATE users SET rappel_topic = ? WHERE id = ?')->execute([$t, $uid]);
+            log_event($uid, 'Sujet ntfy des rappels : ' . ($t !== '' ? $t : 'celui du portail'));
+            $msg = 'Tous tes rappels partiront sur le sujet « ' . ($t !== '' ? $t : setting('ntfy_topic')) . ' ».';
+            if ($t !== '' && isset($_POST['test'])) {
+                $msg = ($err = ntfy_send('Test des rappels', 'Tes rappels arriveront ici.', 3, ['alarm_clock'], $t)) ?? $msg . ' Test envoyé.';
+            }
+        }
+        flash($msg);
+        redirect('/rappels.php');
+    }
 
     if (in_array($action, ['create', 'update'], true)) {
         [$data, $err] = rappel_from_post($_POST);
@@ -74,7 +90,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $msg = '✅ Rappel validé : plus de relance.';
     } elseif ($r && $action === 'test') {
         $err = ntfy_send($r['title'], ($r['message'] !== '' ? $r['message'] : 'Rappel') . "\n(test)", (int) $r['priority'],
-            ['alarm_clock'], $r['topic'] !== '' ? $r['topic'] : null);
+            ['alarm_clock'], rappel_topic($r));
         $msg = $err ?? 'Notification de test envoyée.';
     } elseif ($r && $action === 'delete') {
         db()->prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?')->execute([$r['id'], $uid]);
@@ -162,9 +178,9 @@ function rappel_form(?array $r, ?array $post): void
           </select></label>
       </div>
       <div class="rp-row">
-        <label class="field"><span>Sujet ntfy <em>facultatif</em></span>
+        <label class="field"><span>Sujet ntfy <em>seulement pour ce rappel</em></span>
           <input name="topic" value="<?= e($v('topic')) ?>" maxlength="64" pattern="[A-Za-z0-9_\-]{1,64}" spellcheck="false" autocomplete="off"
-                 placeholder="<?= e(setting('ntfy_topic') ?: 'celui du portail') ?>"></label>
+                 placeholder="<?= e(($GLOBALS['me']['rappel_topic'] ?? '') ?: (setting('ntfy_topic') ?: 'celui du portail')) ?> (comme les autres)"></label>
       </div>
       <?php if ($r): ?>
         <label class="check"><input type="checkbox" name="enabled" value="1" <?= $enabled ? 'checked' : '' ?>> Actif</label>
@@ -205,6 +221,18 @@ page_start('Rappels', $me, 'rappels');
   </div>
 </section>
 
+<section class="panel" id="sujet">
+  <form method="post" class="ct-form">
+    <?= csrf_field() ?><input type="hidden" name="action" value="topic_save">
+    <label class="field"><span>Sujet ntfy de tous mes rappels</span>
+      <input name="rappel_topic" value="<?= e($me['rappel_topic']) ?>" maxlength="64" pattern="[A-Za-z0-9_\-]{1,64}" spellcheck="false" autocomplete="off"
+             placeholder="<?= e(setting('ntfy_topic') ?: 'portail-rappels') ?> (celui du portail)"></label>
+    <button class="btn btn-ghost btn-sm" type="submit">Enregistrer</button>
+    <button class="btn btn-ghost btn-sm" type="submit" name="test" value="1"><?= icon('bell') ?> Enregistrer et tester</button>
+  </form>
+  <p class="muted small rp-hint">Vide : les rappels arrivent sur le même sujet que les alertes du portail. Abonne-toi à ce sujet dans l'app ntfy de ton téléphone.</p>
+</section>
+
 <section class="panel panel-accent" id="nouveau">
   <details class="ct-edit" <?= !$list || ($retry && !$retry['id']) ? 'open' : '' ?>>
     <summary><?= icon('bell') ?> Nouveau rappel</summary>
@@ -241,7 +269,7 @@ page_start('Rappels', $me, 'rappels');
       <?php if ($on && $r['next_at'] === null): ?><span class="muted">Pas d'autre envoi prévu après celui-ci</span><?php elseif ($on): ?>Prochain envoi : <strong><?= e(rappel_when((int) $r['next_at'])) ?></strong><?php else: ?><span class="muted"><?= $done ? 'Envoyé' : 'Aucun envoi tant qu\'il est en pause' ?></span><?php endif; ?>
       <?php if ($r['last_sent_at'] && !$done): ?><br><span class="muted small">Dernier envoi : <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
       <?php if ($done): ?><span class="muted"> le <?= e(french_datetime((int) $r['last_sent_at'])) ?></span><?php endif; ?>
-      <?php if ($r['topic'] !== ''): ?><br><span class="muted small">Sujet ntfy : <span class="mono"><?= e($r['topic']) ?></span></span><?php endif; ?>
+      <?php if ($r['topic'] !== ''): ?><br><span class="muted small">Sujet ntfy de ce rappel : <span class="mono"><?= e($r['topic']) ?></span></span><?php endif; ?>
     </p>
     <?php if ($r['last_error'] !== '' && $on): ?>
       <div class="alert alert-error small" role="alert">Envoi en échec, nouvel essai chaque minute : <?= e($r['last_error']) ?></div>

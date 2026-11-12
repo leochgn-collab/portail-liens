@@ -636,3 +636,5 @@ form[data-autosubmit] .seg { max-width: 380px; }
 .rp-wait::before { background: radial-gradient(120% 70% at 0% 0%, rgba(251,191,36,.16), transparent 55%); }
 .rp-wait .ct-state { color: var(--warn); border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.1); }
 .rp-ack { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: #fde68a; }
+.rp-hint { margin: 10px 0 0; }
+#sujet .ct-form .field { flex: 1 1 220px; }
