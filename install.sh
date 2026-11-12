@@ -53,12 +53,18 @@ ecrire_vhost() {
 
     <IfModule mod_headers.c>
         Header always unset X-Powered-By
-        Header set X-Content-Type-Options "nosniff"
         Header set X-Robots-Tag "noindex, nofollow"
-        Header setifempty Referrer-Policy "no-referrer"
-        Header setifempty X-Frame-Options "DENY"
-        Header setifempty Strict-Transport-Security "max-age=31536000"
     </IfModule>
+    # Les pages PHP envoient elles-mêmes leurs en-têtes de sécurité (send_security_headers) ;
+    # Apache ne les ajoute qu'aux fichiers statiques, sinon ils arrivent en double (« DENY, DENY »).
+    <FilesMatch "\.(?!php\$)[^.]+\$">
+        <IfModule mod_headers.c>
+            Header set X-Content-Type-Options "nosniff"
+            Header set Referrer-Policy "no-referrer"
+            Header set X-Frame-Options "DENY"
+            Header set Strict-Transport-Security "max-age=31536000"
+        </IfModule>
+    </FilesMatch>
 
     <IfModule mod_expires.c>
         ExpiresActive On
