@@ -1,7 +1,9 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__) . '/src/bootstrap.php';
+require dirname(__DIR__) . '/src/motdepasse.php';
 
+reset_migrate();
 $user = require_login();
 $errors = [];
 $newCodes = $_SESSION['new_codes'] ?? null;
@@ -53,6 +55,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         log_event((int) $user['id'], 'Nouveaux codes de secours générés');
         flash('Nouveaux codes générés. Les anciens ne fonctionnent plus.');
         redirect('/compte.php');
+    } elseif ($action === 'email') {
+        $email = trim((string) ($_POST['email'] ?? ''));
+        $taken = db()->prepare('SELECT COUNT(*) FROM users WHERE id <> ? AND email <> \'\' AND lower(email) = lower(?)');
+        $taken->execute([$user['id'], $email]);
+        if ($email !== '' && !valid_email($email)) {
+            $errors[] = 'Adresse e-mail invalide.';
+        } elseif ($email !== '' && (int) $taken->fetchColumn() > 0) {
+            $errors[] = 'Cette adresse est déjà utilisée par un autre compte.';
+        } else {
+            db()->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$email, $user['id']]);
+            log_event((int) $user['id'], $email === '' ? 'Adresse e-mail retirée' : 'Adresse e-mail modifiée');
+            if ($email !== '' && mail_configured()) {
+                $err = send_mail($email, 'Adresse enregistrée · ' . APP_NAME,
+                    "Bonjour {$user['username']},\n\nCette adresse est maintenant celle de ton compte sur " . APP_NAME . ".\n"
+                    . "Elle servira à recevoir un lien si tu oublies ton mot de passe.\n\n"
+                    . "Si ce n'est pas toi, préviens un administrateur.");
+                flash($err === null
+                    ? 'Adresse enregistrée. Un e-mail de test vient de t\'être envoyé.'
+                    : 'Adresse enregistrée, mais l\'e-mail de test n\'est pas parti : ' . $err);
+            } else {
+                flash($email === '' ? 'Adresse e-mail retirée.' : 'Adresse enregistrée.');
+            }
+            redirect('/compte.php');
+        }
     }
 }
 
@@ -121,6 +147,21 @@ page_start('Mon compte', $user, 'compte');
     <p class="muted small">Nouveau téléphone ? Demande à un administrateur de réinitialiser ta double authentification : tu la reconfigureras à la prochaine connexion.</p>
   </section>
 </div>
+
+<section class="panel">
+  <h2>Adresse e-mail</h2>
+  <p class="muted">Sert uniquement à recevoir un lien si tu oublies ton mot de passe<?= mail_configured() ? '' : ' (l\'envoi de mails n\'est pas encore configuré sur ce portail)' ?>.</p>
+  <form method="post" class="form">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="email">
+    <input type="text" name="username" value="<?= e($user['username']) ?>" autocomplete="username" hidden>
+    <label class="field"><span>Adresse e-mail <em>laisser vide pour la retirer</em></span>
+      <input type="email" name="email" value="<?= e((string) ($user['email'] ?? '')) ?>" autocomplete="email" maxlength="254"></label>
+    <label class="field"><span>Mot de passe actuel</span>
+      <input type="password" name="current" autocomplete="current-password" required></label>
+    <button class="btn btn-primary" type="submit">Enregistrer l'adresse</button>
+  </form>
+</section>
 
 <section class="panel">
   <h2>Apparence</h2>

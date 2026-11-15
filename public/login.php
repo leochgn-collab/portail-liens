@@ -75,5 +75,6 @@ auth_start('Connexion');
     </label>
     <button class="btn btn-primary btn-block" type="submit">Continuer</button>
   </form>
+  <p class="auth-alt"><a href="/mot-de-passe-oublie.php">Mot de passe oublié ?</a></p>
 </section>
 <?php auth_end();
