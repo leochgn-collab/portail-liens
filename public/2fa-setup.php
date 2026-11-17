@@ -46,6 +46,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         clear_attempts('2fa', $key);
         log_event((int) $user['id'], 'Double authentification activée');
         $user = find_user((int) $user['id']);
+        if (!empty($_POST['trust'])) {
+            trust_device($user, ($_POST['app'] ?? '') === '1');
+        }
         complete_login($user, '/compte.php', [
             'new_codes' => $codes,
             'flash'     => 'Double authentification activée. Note tes codes de secours maintenant.',
@@ -86,6 +89,8 @@ auth_start('Activer la double authentification');
         <?= csrf_field() ?>
         <input name="code" class="mono code-input otp" inputmode="numeric" pattern="[0-9 ]{6,7}" placeholder="000000" autocomplete="one-time-code" required maxlength="7" aria-label="Code à 6 chiffres">
         <button class="btn btn-primary" type="submit">Activer</button>
+        <label class="check trust"><input type="checkbox" name="trust" value="1" data-trust><span>Faire confiance à cet appareil <span class="muted">(plus de code pendant <?= (int) TRUST_DAYS ?> jours)</span></span></label>
+        <input type="hidden" name="app" value="0" data-app>
       </form>
     </li>
   </ol>

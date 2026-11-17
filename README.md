@@ -44,6 +44,16 @@ Le script installe Apache, PHP 8.4 et SQLite, télécharge le portail dans `/var
 
 Dans Zoraxy, crée une règle de proxy `leo44.cloud → http://IP-du-serveur:80` et active le HTTPS. Le portail fait confiance à l'IP du proxy indiquée pendant l'installation pour connaître l'adresse réelle des visiteurs (utile pour bloquer les essais de mot de passe) et savoir que la connexion est chiffrée.
 
+## Application sur le téléphone
+
+Le portail s'installe comme une application :
+- **iPhone** : ouvre le site dans Safari → bouton Partager → « Sur l'écran d'accueil ».
+- **Android** : Chrome → menu ⋮ → « Installer l'application ».
+
+Lors de la double authentification, coche **« Faire confiance à cet appareil »** (case pré-cochée dans l'application installée) : l'appareil reste connecté sans mot de passe ni code pendant 90 jours après sa dernière utilisation (`TRUST_DAYS`). Les appareils de confiance sont listés dans **Mon compte**, où tu peux les retirer ; changer de mot de passe ou réinitialiser la 2FA les retire tous, et la déconnexion retire l'appareil utilisé. Une alerte ntfy est envoyée à chaque nouvel appareil de confiance.
+
+En console : `$P forget-devices nom` retire tous les appareils de confiance d'un compte.
+
 ## Mise à jour
 
 ```bash

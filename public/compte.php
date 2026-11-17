@@ -23,6 +23,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         redirect('/compte.php');
     }
+    if ($action === 'device_forget' || $action === 'devices_forget_all') {
+        $one = $action === 'device_forget' ? (int) ($_POST['device'] ?? 0) : null;
+        $n = forget_devices((int) $user['id'], $one);
+        log_event((int) $user['id'], $one ? 'Appareil de confiance retiré' : "Tous les appareils de confiance retirés ($n)");
+        if ($one === null || $one === (int) ($_SESSION['device_id'] ?? 0)) {
+            clear_trust_cookie();
+        }
+        flash($one ? 'Appareil retiré : il devra refaire la double authentification.' : "$n appareil(s) retiré(s).");
+        redirect('/compte.php');
+    }
     $current = (string) ($_POST['current'] ?? '');
     $key = 'acct' . $user['id'];
 
@@ -184,6 +194,41 @@ page_start('Mon compte', $user, 'compte');
     </div>
     <noscript><button class="btn btn-primary" type="submit">Enregistrer</button></noscript>
   </form>
+</section>
+
+<?php $devices = user_devices((int) $user['id']); $here = (int) ($_SESSION['device_id'] ?? 0); ?>
+<section class="panel">
+  <h2><?= icon('key') ?> Appareils de confiance <span class="count"><?= count($devices) ?></span></h2>
+  <p class="muted small">Ces appareils se connectent sans mot de passe ni code pendant <?= (int) TRUST_DAYS ?> jours après leur dernière utilisation. Retire tout appareil perdu ou que tu ne reconnais pas. Changer ton mot de passe les retire tous.</p>
+  <?php if (!$devices): ?>
+    <p class="muted">Aucun appareil de confiance. Coche « Faire confiance à cet appareil » lors de la double authentification.</p>
+  <?php else: ?>
+  <table class="table">
+    <thead><tr><th>Appareil</th><th>Ajouté</th><th>Dernière utilisation</th><th>Adresse IP</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($devices as $d): ?>
+      <tr>
+        <td><strong><?= e($d['label']) ?></strong><?= (int) $d['id'] === $here ? ' <span class="badge">Cet appareil</span>' : '' ?></td>
+        <td class="nowrap"><?= e(french_datetime((int) $d['created_at'])) ?></td>
+        <td class="nowrap"><?= e(french_datetime((int) $d['last_used'])) ?></td>
+        <td class="mono"><?= e((string) $d['last_ip']) ?></td>
+        <td class="actions">
+          <form method="post" data-confirm="Retirer « <?= e($d['label']) ?> » ? Il devra refaire la double authentification.">
+            <?= csrf_field() ?><input type="hidden" name="action" value="device_forget"><input type="hidden" name="device" value="<?= (int) $d['id'] ?>">
+            <button class="btn btn-danger btn-sm" type="submit">Retirer</button>
+          </form>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php if (count($devices) > 1): ?>
+  <form method="post" data-confirm="Retirer tous les appareils de confiance ?" class="row">
+    <?= csrf_field() ?><input type="hidden" name="action" value="devices_forget_all">
+    <button class="btn btn-ghost btn-sm" type="submit">Tout retirer</button>
+  </form>
+  <?php endif; ?>
+  <?php endif; ?>
 </section>
 
 <section class="panel">

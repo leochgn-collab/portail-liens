@@ -75,6 +75,7 @@ switch ($cmd) {
         db()->prepare('UPDATE users SET totp_enabled=0, totp_secret=NULL, totp_last_step=0, pwd_version=pwd_version+1 WHERE id=?')
             ->execute([$u['id']]);
         db()->prepare('DELETE FROM recovery_codes WHERE user_id=?')->execute([$u['id']]);
+        forget_devices((int) $u['id']);
         db()->prepare('DELETE FROM attempts')->execute();
         log_event((int) $u['id'], 'Double authentification réinitialisée en console');
         echo "Double authentification de $name réinitialisée : elle sera reconfigurée à la prochaine connexion.\n";
@@ -84,6 +85,17 @@ switch ($cmd) {
         foreach (db()->query('SELECT username, is_admin, totp_enabled FROM users ORDER BY username') as $u) {
             printf("%-24s %-6s 2FA %s\n", $u['username'], $u['is_admin'] ? 'admin' : '', $u['totp_enabled'] ? 'active' : 'à configurer');
         }
+        break;
+
+    case 'forget-devices':
+        $u = $name !== '' ? db()->prepare('SELECT * FROM users WHERE username = ?') : null;
+        $u?->execute([$name]);
+        $row = $u ? $u->fetch() : null;
+        if (!$row) {
+            fwrite(STDERR, "Compte introuvable.\n");
+            exit(1);
+        }
+        echo forget_devices((int) $row['id']), " appareil(s) de confiance retiré(s) pour $name.\n";
         break;
 
     case 'bans':
@@ -112,6 +124,6 @@ switch ($cmd) {
         break;
 
     default:
-        echo "Usage : php bin/portail.php create-admin|reset-password|reset-2fa|list|bans|unban <identifiant ou IP>\n";
+        echo "Usage : php bin/portail.php create-admin|reset-password|reset-2fa|forget-devices|list|bans|unban <identifiant ou IP>\n";
         exit(1);
 }

@@ -194,6 +194,18 @@
     setInterval(load, 120000);
   }
 
+  // ── Application installée (écran d'accueil) ──
+  var installee = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    || window.navigator.standalone === true;
+  document.querySelectorAll('[data-app]').forEach(function (i) { i.value = installee ? '1' : '0'; });
+  // Dans l'application installée, c'est forcément ton téléphone : la case est pré-cochée.
+  if (installee) {
+    document.querySelectorAll('[data-trust]').forEach(function (c) { c.checked = true; });
+  }
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  }
+
   // ── Rechargement automatique (page Sauvegardes pendant une sauvegarde) ──
   var auto = document.querySelector('[data-autorefresh]');
   if (auto) {

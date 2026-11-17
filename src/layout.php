@@ -73,12 +73,18 @@ function page_start(string $title, array $user, string $active): void
 <html lang="fr" data-theme="<?= e($theme) ?>" data-fond="<?= e($fond) ?>">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0a0d12">
+<meta name="theme-color" content="#06080d">
 <title><?= e($title) ?> · <?= e(APP_NAME) ?></title>
 <link rel="icon" href="<?= e(asset('favicon.svg')) ?>" type="image/svg+xml">
+<link rel="manifest" href="/manifest.php">
+<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <link rel="stylesheet" href="<?= e(asset('style.css')) ?>">
 </head>
 <body class="app">
@@ -122,12 +128,18 @@ function auth_start(string $title): void
 <html lang="fr" data-theme="<?= e($theme) ?>" data-fond="<?= e($fond) ?>">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0a0d12">
+<meta name="theme-color" content="#06080d">
 <title><?= e($title) ?> · <?= e(APP_NAME) ?></title>
 <link rel="icon" href="<?= e(asset('favicon.svg')) ?>" type="image/svg+xml">
+<link rel="manifest" href="/manifest.php">
+<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="<?= e(APP_NAME) ?>">
 <link rel="stylesheet" href="<?= e(asset('style.css')) ?>">
 </head>
 <body class="auth">

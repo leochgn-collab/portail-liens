@@ -35,6 +35,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             notify("Code de secours utilisé par « {$user['username']} »",
                 'Un code de secours a servi à se connecter. Si ce n\'est pas toi, change ton mot de passe.', 4, ['key']);
             $left = remaining_recovery_codes((int) $user['id']);
+            if (!empty($_POST['trust'])) {
+                trust_device($user, ($_POST['app'] ?? '') === '1');
+            }
             complete_login($user, $left <= 2 ? '/compte.php' : '/', [
                 'flash' => "Code de secours utilisé. Il t'en reste $left." . ($left <= 2 ? ' Génère-en de nouveaux.' : ''),
             ]);
@@ -46,6 +49,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             db()->prepare('UPDATE users SET totp_last_step = ? WHERE id = ?')->execute([$step, $user['id']]);
             clear_attempts('2fa', $key);
             clear_attempts('user', strtolower($user['username']));
+            if (!empty($_POST['trust'])) {
+                trust_device($user, ($_POST['app'] ?? '') === '1');
+            }
             complete_login($user);
         }
     }
@@ -71,6 +77,8 @@ auth_start('Vérification');
         <span>Code de secours</span>
         <input name="recovery" class="mono code-input" placeholder="XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" required autofocus maxlength="20">
       </label>
+      <label class="check trust"><input type="checkbox" name="trust" value="1" data-trust><span>Faire confiance à cet appareil <span class="muted">(plus de code pendant <?= (int) TRUST_DAYS ?> jours)</span></span></label>
+      <input type="hidden" name="app" value="0" data-app>
       <button class="btn btn-primary btn-block" type="submit">Valider</button>
     </form>
     <p class="auth-alt"><a href="/2fa.php">Utiliser plutôt l'application</a></p>
@@ -82,6 +90,8 @@ auth_start('Vérification');
         <span>Code</span>
         <input name="code" class="mono code-input otp" inputmode="numeric" pattern="[0-9 ]{6,7}" placeholder="000000" autocomplete="one-time-code" required autofocus maxlength="7">
       </label>
+      <label class="check trust"><input type="checkbox" name="trust" value="1" data-trust><span>Faire confiance à cet appareil <span class="muted">(plus de code pendant <?= (int) TRUST_DAYS ?> jours)</span></span></label>
+      <input type="hidden" name="app" value="0" data-app>
       <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
     </form>
     <p class="auth-alt"><a href="/2fa.php?secours=1">Téléphone perdu ? Utiliser un code de secours</a></p>

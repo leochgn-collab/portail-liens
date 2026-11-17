@@ -8,6 +8,7 @@ $uid = $_SESSION['uid'] ?? null;
 if ($uid) {
     log_event((int) $uid, 'Déconnexion');
 }
+forget_current_device();
 logout_session();
 flash('Tu es déconnecté.');
 redirect('/login.php');

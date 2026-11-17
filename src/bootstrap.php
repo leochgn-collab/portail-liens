@@ -7,6 +7,7 @@ define('DATA_DIR', ROOT . '/data');
 require __DIR__ . '/config.php';
 require __DIR__ . '/totp.php';
 require __DIR__ . '/proxmox.php';
+require __DIR__ . '/appareils.php';
 require __DIR__ . '/rappels.php';
 
 error_reporting(E_ALL);
@@ -106,6 +107,18 @@ function migrate(PDO $pdo): void
             vmid       INTEGER PRIMARY KEY,
             name       TEXT NOT NULL DEFAULT '',
             first_seen INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS trusted_devices (
+            id             INTEGER PRIMARY KEY,
+            user_id        INTEGER NOT NULL,
+            selector       TEXT NOT NULL UNIQUE,
+            validator_hash TEXT NOT NULL,
+            pwd_version    INTEGER NOT NULL,
+            label          TEXT NOT NULL DEFAULT '',
+            created_at     INTEGER NOT NULL,
+            last_used      INTEGER NOT NULL,
+            last_ip        TEXT,
+            expires_at     INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS journal (
             id      INTEGER PRIMARY KEY,
@@ -282,7 +295,7 @@ function send_security_headers(): void
     $nonce = csp_nonce();
     header("Content-Security-Policy: default-src 'none'; script-src 'self' 'nonce-$nonce'; style-src 'self'; "
         . "img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; "
-        . "frame-ancestors 'none'; base-uri 'none'");
+        . "manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'");
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
@@ -645,7 +658,7 @@ function current_user(): ?array
     start_session();
     $uid = $_SESSION['uid'] ?? null;
     if (!$uid) {
-        return null;
+        return device_login(); // appareil de confiance : reconnexion sans mot de passe ni code
     }
     $user = find_user((int) $uid);
     // Session invalidée si le compte a été supprimé ou si le mot de passe a changé ailleurs.
@@ -691,6 +704,7 @@ function complete_login(array $user, string $to = '/', array $extra = []): never
         'last'        => $created,
         'prev_login'  => $user['last_login_at'] ? (int) $user['last_login_at'] : null,
         'prev_ip'     => $user['last_login_ip'],
+        'device_id'   => $GLOBALS['trusted_device_id'] ?? null,
     ] + $extra;
     db()->prepare('UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?')
         ->execute([$created, client_ip(), $user['id']]);
