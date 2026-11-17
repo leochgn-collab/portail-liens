@@ -168,17 +168,17 @@ Le portail doit être sur le même réseau que l'appareil (pour un CT Proxmox : 
 
 ### Bouton « Éteindre » (facultatif)
 
-Le portail éteint l'appareil par SSH avec **sa propre clé**, que l'appareil n'accepte **que pour s'éteindre** : même si quelqu'un volait cette clé, il ne pourrait rien faire d'autre. L'appareil doit être allumé, avec SSH activé (ReadyNAS : Système → Paramètres → Services → SSH).
+Le portail éteint l'appareil par SSH avec **sa propre clé**, que l'appareil n'accepte **que pour s'éteindre** (commande imposée côté appareil) : même si quelqu'un volait cette clé, il ne pourrait rien faire d'autre. L'appareil doit être allumé, avec SSH activé (ReadyNAS : Système → Paramètres → Services → SSH).
 
 1. Dans le serveur du portail (en root), crée la clé :
    ```bash
    apt install -y openssh-client
    runuser -u www-data -- ssh-keygen -t ed25519 -N '' -C portail-extinction -f /var/www/portail-liens/data/wol_ssh_key
    ```
-2. Autorise-la sur l'appareil, limitée à la commande `poweroff` (mot de passe root de l'appareil demandé une fois ; sur un ReadyNAS, c'est celui du compte admin) :
+2. Autorise-la sur l'appareil, limitée à la commande d'extinction (mot de passe root de l'appareil demandé une fois ; sur un ReadyNAS, c'est celui du compte admin). Sur un **ReadyNAS**, utilise `rnutil rn_shutdown` : c'est l'extinction de l'interface Netgear (elle arrête d'abord readynasd, les applis et les disques USB). Sur un autre Linux, remplace-la par `poweroff`.
    ```bash
    cat /var/www/portail-liens/data/wol_ssh_key.pub | ssh root@192.168.1.201 \
-     'mkdir -p ~/.ssh && chmod 700 ~/.ssh && sed "s/^/command=\"poweroff\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty /" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+     'mkdir -p ~/.ssh && chmod 700 ~/.ssh && sed "s/^/command=\"rnutil rn_shutdown\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty /" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
    ```
 3. Ajoute `'ssh' => 'root@192.168.1.201'` à l'appareil dans `WOL_DEVICES` :
    ```php
