@@ -8,6 +8,7 @@ require __DIR__ . '/config.php';
 require __DIR__ . '/totp.php';
 require __DIR__ . '/proxmox.php';
 require __DIR__ . '/appareils.php';
+require __DIR__ . '/faceid.php';
 require __DIR__ . '/rappels.php';
 
 error_reporting(E_ALL);
@@ -119,6 +120,16 @@ function migrate(PDO $pdo): void
             last_used      INTEGER NOT NULL,
             last_ip        TEXT,
             expires_at     INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS faceid_creds (
+            id         INTEGER PRIMARY KEY,
+            user_id    INTEGER NOT NULL,
+            device_id  INTEGER NOT NULL UNIQUE,
+            cred_id    TEXT NOT NULL,
+            public_key TEXT NOT NULL,
+            sign_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            last_used  INTEGER
         );
         CREATE TABLE IF NOT EXISTS journal (
             id      INTEGER PRIMARY KEY,
@@ -666,6 +677,15 @@ function current_user(): ?array
         logout_session();
         return null;
     }
+    // Face ID : verrouillage après FACEID_LOCK secondes sans activité (ex. application rouverte).
+    $now = time();
+    if (!empty($_SESSION['faceid']) && $now - (int) ($_SESSION['seen'] ?? $now) > FACEID_LOCK) {
+        $dev = (int) ($_SESSION['device_id'] ?? 0);
+        session_regenerate_id(true);
+        $_SESSION = ['unlock_uid' => (int) $user['id'], 'unlock_dev' => $dev, 'created' => $now, 'last' => $now];
+        return null;
+    }
+    $_SESSION['seen'] = $now;
     return $user;
 }
 
@@ -673,6 +693,16 @@ function require_login(): array
 {
     $user = current_user();
     if (!$user) {
+        if (!empty($_SESSION['unlock_uid'])) {
+            if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
+                $_SESSION['unlock_next'] = (string) ($_SERVER['REQUEST_URI'] ?? '/'); // page à rouvrir après Face ID
+            }
+            if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+                http_response_code(401);
+                exit('{}');
+            }
+            redirect('/deverrouiller.php');
+        }
         redirect('/login.php');
     }
     if ($user['must_change_pwd'] && basename($_SERVER['SCRIPT_NAME']) !== 'compte.php') {

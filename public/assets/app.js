@@ -251,6 +251,115 @@
     });
   }
 
+  // ── Face ID (clé d'accès WebAuthn) ──
+  var b64u = {
+    enc: function (buf) {
+      var s = '', b = new Uint8Array(buf);
+      for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    },
+    dec: function (str) {
+      var s = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4));
+      var b = new Uint8Array(s.length);
+      for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+      return b.buffer;
+    }
+  };
+  var poster = function (csrf, data) {
+    var body = new URLSearchParams(data);
+    body.set('csrf', csrf);
+    return fetch('/faceid.php', { method: 'POST', credentials: 'same-origin', body: body, headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json().catch(function () { return { error: 'Réponse inattendue du serveur.' }; }); });
+  };
+  var afficherErreur = function (box, msg) {
+    var el = box.querySelector('[data-faceid-error]');
+    if (el) { el.textContent = msg; el.hidden = !msg; }
+  };
+  var messageWebauthn = function (e) {
+    if (e && e.name === 'NotAllowedError') return 'Face ID annulé ou refusé. Réessaie.';
+    if (e && e.name === 'InvalidStateError') return 'Une clé existe déjà pour ce site sur cet appareil.';
+    return 'Face ID indisponible sur cet appareil ou ce navigateur.';
+  };
+
+  // Écran verrouillé : déverrouiller.
+  var verrou = document.querySelector('[data-faceid-unlock]');
+  if (verrou) {
+    var bouton = verrou.querySelector('[data-faceid-go]');
+    var enCours = false;
+    var deverrouiller = function () {
+      if (enCours || !window.PublicKeyCredential) {
+        if (!window.PublicKeyCredential) afficherErreur(verrou, messageWebauthn());
+        return;
+      }
+      enCours = true;
+      verrou.classList.add('wait');
+      afficherErreur(verrou, '');
+      navigator.credentials.get({ publicKey: {
+        challenge: b64u.dec(verrou.getAttribute('data-challenge')),
+        rpId: verrou.getAttribute('data-rp'),
+        allowCredentials: [{ type: 'public-key', id: b64u.dec(verrou.getAttribute('data-cred')) }],
+        userVerification: 'required',
+        timeout: 60000
+      } }).then(function (cred) {
+        return poster(verrou.getAttribute('data-csrf'), {
+          action: 'unlock',
+          id: b64u.enc(cred.rawId),
+          clientDataJSON: b64u.enc(cred.response.clientDataJSON),
+          authenticatorData: b64u.enc(cred.response.authenticatorData),
+          signature: b64u.enc(cred.response.signature)
+        });
+      }).then(function (rep) {
+        if (rep.ok || rep.next) { location.replace(rep.next || '/'); return; }
+        // Défi déjà utilisé : on recharge pour en obtenir un nouveau.
+        afficherErreur(verrou, rep.error || 'Échec du déverrouillage.');
+        setTimeout(function () { location.reload(); }, 1500);
+      }).catch(function (e) {
+        afficherErreur(verrou, messageWebauthn(e));
+      }).then(function () {
+        enCours = false;
+        verrou.classList.remove('wait');
+      });
+    };
+    bouton.addEventListener('click', deverrouiller);
+    deverrouiller(); // lancement direct ; si le téléphone exige un geste, le bouton prend le relais
+  }
+
+  // Mon compte : activer Face ID sur cet appareil.
+  var boite = document.querySelector('[data-faceid-box]');
+  var activer = boite && boite.querySelector('[data-faceid-register]');
+  if (activer) {
+    activer.addEventListener('click', function () {
+      if (!window.PublicKeyCredential) { afficherErreur(boite, messageWebauthn()); return; }
+      activer.disabled = true;
+      afficherErreur(boite, '');
+      var csrf = boite.getAttribute('data-csrf');
+      poster(csrf, { action: 'register_options' }).then(function (o) {
+        if (o.error) throw new Error(o.error);
+        return navigator.credentials.create({ publicKey: {
+          challenge: b64u.dec(o.challenge),
+          rp: o.rp,
+          user: { id: b64u.dec(o.user.id), name: o.user.name, displayName: o.user.displayName },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+          attestation: 'none',
+          timeout: 60000
+        } });
+      }).then(function (cred) {
+        return poster(csrf, {
+          action: 'register',
+          clientDataJSON: b64u.enc(cred.response.clientDataJSON),
+          attestationObject: b64u.enc(cred.response.attestationObject)
+        });
+      }).then(function (rep) {
+        if (!rep.ok) throw new Error(rep.error || 'Échec de l\'activation.');
+        location.reload();
+      }).catch(function (e) {
+        afficherErreur(boite, e && e.name && e.name !== 'Error' ? messageWebauthn(e) : ((e && e.message) || 'Échec de l\'activation.'));
+        activer.disabled = false;
+      });
+    });
+  }
+
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('/sw.js').catch(function () {});
   }

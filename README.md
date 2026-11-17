@@ -52,6 +52,8 @@ Le portail s'installe comme une application :
 
 Lors de la double authentification, coche **« Faire confiance à cet appareil »** (case pré-cochée dans l'application installée) : l'appareil reste connecté sans mot de passe ni code pendant 90 jours après sa dernière utilisation (`TRUST_DAYS`). Les appareils de confiance sont listés dans **Mon compte**, où tu peux les retirer ; changer de mot de passe ou réinitialiser la 2FA les retire tous, et la déconnexion retire l'appareil utilisé. Une alerte ntfy est envoyée à chaque nouvel appareil de confiance.
 
+**Face ID** : sur un appareil de confiance, *Mon compte → Activer Face ID sur cet appareil* crée une clé d'accès protégée par Face ID (ou Touch ID / code de l'appareil). L'application se verrouille ensuite après 2 minutes sans activité (`FACEID_LOCK`, en secondes) et demande Face ID pour se rouvrir ; « Utiliser mon mot de passe » reste possible (mot de passe + code 2FA). Seule la clé publique est stockée sur le serveur, qui vérifie la signature à chaque déverrouillage.
+
 En console : `$P forget-devices nom` retire tous les appareils de confiance d'un compte.
 
 ## Mise à jour

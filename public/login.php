@@ -3,8 +3,12 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 start_session();
-if (current_user()) {
+if (isset($_GET['motdepasse'])) {
+    unset($_SESSION['unlock_uid'], $_SESSION['unlock_dev']); // « Utiliser mon mot de passe » au lieu de Face ID
+} elseif (current_user()) {
     redirect('/');
+} elseif (!empty($_SESSION['unlock_uid'])) {
+    redirect('/deverrouiller.php');
 }
 
 $error = null;

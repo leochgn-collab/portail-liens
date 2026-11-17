@@ -23,6 +23,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         redirect('/compte.php');
     }
+    if ($action === 'faceid_off') {
+        $here = (int) ($_SESSION['device_id'] ?? 0);
+        db()->prepare('DELETE FROM faceid_creds WHERE user_id = ? AND device_id = ?')->execute([$user['id'], $here]);
+        $_SESSION['faceid'] = false;
+        log_event((int) $user['id'], 'Face ID désactivé sur un appareil de confiance');
+        flash('Face ID désactivé sur cet appareil. Pense à supprimer aussi la clé d\'accès dans l\'app Mots de passe de l\'iPhone.');
+        redirect('/compte.php');
+    }
     if ($action === 'device_forget' || $action === 'devices_forget_all') {
         $one = $action === 'device_forget' ? (int) ($_POST['device'] ?? 0) : null;
         $n = forget_devices((int) $user['id'], $one);
@@ -200,6 +208,22 @@ page_start('Mon compte', $user, 'compte');
 <section class="panel">
   <h2><?= icon('key') ?> Appareils de confiance <span class="count"><?= count($devices) ?></span></h2>
   <p class="muted small">Ces appareils se connectent sans mot de passe ni code pendant <?= (int) TRUST_DAYS ?> jours après leur dernière utilisation. Retire tout appareil perdu ou que tu ne reconnais pas. Changer ton mot de passe les retire tous.</p>
+  <?php $hereCred = $here ? faceid_cred_for_device($here) : null; ?>
+  <?php if ($here): ?>
+  <div class="faceid-box" data-faceid-box data-csrf="<?= e(csrf_token()) ?>">
+    <?php if ($hereCred): ?>
+      <p><strong>🔒 Face ID est activé sur cet appareil.</strong> <span class="muted">L'application le demande quand tu l'ouvres après <?= (int) round(FACEID_LOCK / 60) ?> min sans l'utiliser.</span></p>
+      <form method="post" data-confirm="Désactiver Face ID sur cet appareil ?">
+        <?= csrf_field() ?><input type="hidden" name="action" value="faceid_off">
+        <button class="btn btn-ghost btn-sm" type="submit">Désactiver Face ID</button>
+      </form>
+    <?php else: ?>
+      <p><strong>Protéger l'application avec Face ID</strong> <span class="muted">Face ID (ou Touch ID, ou le code de l'appareil) sera demandé à l'ouverture de l'application.</span></p>
+      <button class="btn btn-primary btn-sm" type="button" data-faceid-register>🔒 Activer Face ID sur cet appareil</button>
+      <div class="alert alert-error" role="alert" data-faceid-error hidden></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
   <?php if (!$devices): ?>
     <p class="muted">Aucun appareil de confiance. Coche « Faire confiance à cet appareil » lors de la double authentification.</p>
   <?php else: ?>
@@ -208,7 +232,7 @@ page_start('Mon compte', $user, 'compte');
     <tbody>
     <?php foreach ($devices as $d): ?>
       <tr>
-        <td><strong><?= e($d['label']) ?></strong><?= (int) $d['id'] === $here ? ' <span class="badge">Cet appareil</span>' : '' ?></td>
+        <td><strong><?= e($d['label']) ?></strong><?= (int) $d['id'] === $here ? ' <span class="badge">Cet appareil</span>' : '' ?><?= faceid_cred_for_device((int) $d['id']) ? ' <span class="badge badge-muted">Face ID</span>' : '' ?></td>
         <td class="nowrap"><?= e(french_datetime((int) $d['created_at'])) ?></td>
         <td class="nowrap"><?= e(french_datetime((int) $d['last_used'])) ?></td>
         <td class="mono"><?= e((string) $d['last_ip']) ?></td>

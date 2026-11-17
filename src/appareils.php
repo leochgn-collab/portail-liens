@@ -95,6 +95,7 @@ function device_login(): ?array
     $forget = static function () use ($pdo, $dev): void {
         if ($dev) {
             $pdo->prepare('DELETE FROM trusted_devices WHERE id = ?')->execute([$dev['id']]);
+            $pdo->prepare('DELETE FROM faceid_creds WHERE device_id = ?')->execute([$dev['id']]);
         }
         clear_trust_cookie();
     };
@@ -116,20 +117,13 @@ function device_login(): ?array
         return null;
     }
 
-    session_regenerate_id(true);
-    $flash = $_SESSION['flash'] ?? null;
-    $_SESSION = [
-        'uid'         => (int) $user['id'],
-        'pwd_version' => (int) $user['pwd_version'],
-        'created'     => $now,
-        'last'        => $now,
-        'device_id'   => (int) $dev['id'],
-        'prev_login'  => $user['last_login_at'] ? (int) $user['last_login_at'] : null,
-        'prev_ip'     => $user['last_login_ip'],
-    ];
-    if ($flash !== null && !str_starts_with((string) $flash, 'Session expirée')) {
-        $_SESSION['flash'] = $flash;
+    // Face ID activé sur cet appareil : la session reste verrouillée jusqu'à la vérification.
+    if (faceid_cred_for_device((int) $dev['id'])) {
+        session_regenerate_id(true);
+        $_SESSION = ['unlock_uid' => (int) $user['id'], 'unlock_dev' => (int) $dev['id'], 'created' => $now, 'last' => $now];
+        return null;
     }
+    open_device_session($user, (int) $dev['id'], false);
 
     // Mise à jour discrète : une ligne au journal par heure au plus, et prolongation glissante une fois par jour.
     if ($now - (int) $dev['last_used'] > 3600) {
@@ -146,11 +140,34 @@ function device_login(): ?array
     return $user;
 }
 
+/** Ouvre la session complète d'un appareil de confiance (après cookie, ou après Face ID). */
+function open_device_session(array $user, int $deviceId, bool $faceid): void
+{
+    $now = time();
+    session_regenerate_id(true);
+    $flash = $_SESSION['flash'] ?? null;
+    $_SESSION = [
+        'uid'         => (int) $user['id'],
+        'pwd_version' => (int) $user['pwd_version'],
+        'created'     => $now,
+        'last'        => $now,
+        'seen'        => $now,
+        'device_id'   => $deviceId,
+        'faceid'      => $faceid,
+        'prev_login'  => $user['last_login_at'] ? (int) $user['last_login_at'] : null,
+        'prev_ip'     => $user['last_login_ip'],
+    ];
+    if ($flash !== null && !str_starts_with((string) $flash, 'Session expirée')) {
+        $_SESSION['flash'] = $flash;
+    }
+}
+
 /** Oublie l'appareil actuel (déconnexion). */
 function forget_current_device(): void
 {
     $raw = (string) ($_COOKIE[trust_cookie_name()] ?? '');
     if (preg_match('/^([a-f0-9]{24}):/', $raw, $m)) {
+        db()->prepare('DELETE FROM faceid_creds WHERE device_id IN (SELECT id FROM trusted_devices WHERE selector = ?)')->execute([$m[1]]);
         db()->prepare('DELETE FROM trusted_devices WHERE selector = ?')->execute([$m[1]]);
     }
     clear_trust_cookie();
@@ -159,6 +176,7 @@ function forget_current_device(): void
 /** @return array<int, array<string, mixed>> appareils de confiance actifs d'un compte */
 function user_devices(int $uid): array
 {
+    db()->prepare('DELETE FROM faceid_creds WHERE device_id NOT IN (SELECT id FROM trusted_devices WHERE expires_at >= ?)')->execute([time()]);
     db()->prepare('DELETE FROM trusted_devices WHERE expires_at < ?')->execute([time()]);
     $st = db()->prepare('SELECT * FROM trusted_devices WHERE user_id = ? ORDER BY last_used DESC');
     $st->execute([$uid]);
@@ -167,6 +185,11 @@ function user_devices(int $uid): array
 
 function forget_devices(int $uid, ?int $deviceId = null): int
 {
+    if ($deviceId !== null) {
+        db()->prepare('DELETE FROM faceid_creds WHERE user_id = ? AND device_id = ?')->execute([$uid, $deviceId]);
+    } else {
+        db()->prepare('DELETE FROM faceid_creds WHERE user_id = ?')->execute([$uid]);
+    }
     if ($deviceId !== null) {
         $st = db()->prepare('DELETE FROM trusted_devices WHERE user_id = ? AND id = ?');
         $st->execute([$uid, $deviceId]);

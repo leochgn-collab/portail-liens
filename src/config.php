@@ -35,6 +35,8 @@ defined('SESSION_IDLE') || define('SESSION_IDLE', 1800);
 defined('SESSION_MAX')  || define('SESSION_MAX', 43200);
 // Appareil de confiance : durée sans mot de passe ni code 2FA (prolongée à chaque utilisation).
 defined('TRUST_DAYS')   || define('TRUST_DAYS', 90);
+// Face ID : l'application se verrouille après ce délai sans activité (secondes).
+defined('FACEID_LOCK')  || define('FACEID_LOCK', 120);
 
 // Anti-force brute : nombre d'essais ratés autorisés par fenêtre de 15 minutes.
 defined('LOGIN_WINDOW')       || define('LOGIN_WINDOW', 900);
