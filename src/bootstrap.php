@@ -279,11 +279,9 @@ function client_ip(): string
     if (!from_trusted_proxy()) {
         return $remote;
     }
-    $real = trim((string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''));
-    if ($real !== '' && filter_var($real, FILTER_VALIDATE_IP)) {
-        return $real;
-    }
-    // Dernière adresse ajoutée à X-Forwarded-For : celle écrite par le proxy, pas par le visiteur.
+    // Seule la DERNIÈRE adresse de X-Forwarded-For est fiable : c'est le proxy qui l'ajoute.
+    // X-Real-IP n'est pas utilisé : Zoraxy le laisse passer tel quel s'il est envoyé par le visiteur,
+    // qui pourrait alors se donner une fausse adresse et échapper aux blocages.
     $chain = array_filter(array_map('trim', explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))));
     $last = end($chain);
     return $last && filter_var($last, FILTER_VALIDATE_IP) ? $last : $remote;
@@ -719,7 +717,20 @@ function require_admin(): array
         http_response_code(403);
         exit('Accès réservé aux administrateurs.');
     }
+    // Session ouverte par le seul cookie d'appareil de confiance (sans Face ID) : toute action
+    // d'administration demande d'abord le code 2FA, pour qu'un cookie volé ne suffise pas.
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && !empty($_SESSION['weak'])) {
+        $_SESSION['confirm_next'] = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+        flash('Confirme ton identité avec ton code, puis refais ton action.');
+        redirect('/confirmer.php');
+    }
     return $user;
+}
+
+/** Chemin interne sûr pour une redirection (pas de « //autre-site »). */
+function safe_path(string $p, string $default = '/'): string
+{
+    return preg_match('#^/(?![/\\\\])[A-Za-z0-9._/?=&%-]*$#', $p) ? $p : $default;
 }
 
 /** Termine la connexion une fois le mot de passe ET le code 2FA validés. */

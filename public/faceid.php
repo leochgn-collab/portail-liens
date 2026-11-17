@@ -56,7 +56,7 @@ if ($action === 'unlock') {
     if (time() - (int) $dev['last_used'] > 3600) {
         log_event($uid, "Déverrouillage Face ID ({$dev['label']})");
     }
-    repondre(['ok' => true, 'next' => preg_match('#^/[A-Za-z0-9._/?=&%-]*$#', $next) ? $next : '/']);
+    repondre(['ok' => true, 'next' => safe_path($next)]);
 }
 
 // ── Activation sur l'appareil de confiance actuel (depuis Mon compte) ──

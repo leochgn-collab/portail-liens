@@ -154,6 +154,7 @@ function open_device_session(array $user, int $deviceId, bool $faceid): void
         'seen'        => $now,
         'device_id'   => $deviceId,
         'faceid'      => $faceid,
+        'weak'        => !$faceid, // cookie seul : actions d'administration soumises au code 2FA
         'prev_login'  => $user['last_login_at'] ? (int) $user['last_login_at'] : null,
         'prev_ip'     => $user['last_login_ip'],
     ];

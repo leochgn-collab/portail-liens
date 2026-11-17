@@ -96,6 +96,8 @@ const TRUSTED_PROXIES = '192.168.1.104';
 - 10 erreurs par IP en 15 min : adresse bloquée 15 min, puis 1 h, puis 24 h si elle recommence.
 - Chaque essai raté est ralenti d'une seconde.
 - Seules les méthodes GET et POST sont acceptées (PUT, DELETE… refusées).
+- Derrière le proxy, l'adresse du visiteur est lue uniquement dans la dernière entrée de `X-Forwarded-For` (ajoutée par le proxy) : un en-tête `X-Real-IP` envoyé par le visiteur est ignoré.
+- Sur un appareil de confiance sans Face ID, toute action d'administration demande d'abord le code 2FA.
 - Jeton CSRF sur chaque formulaire, cookies `Secure` / `HttpOnly` / `SameSite`, CSP stricte sans script en ligne.
 - Base SQLite et clé de chiffrement dans `data/`, **hors** du dossier publié par Apache.
 - Journal des connexions et actions sensibles.
