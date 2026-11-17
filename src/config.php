@@ -70,3 +70,17 @@ defined('PVE_PROTECTED')  || define('PVE_PROTECTED', [106]);
 defined('PVE_CONFIRM')    || define('PVE_CONFIRM', [104]);
 // Délai laissé à un CT pour s'éteindre proprement avant l'arrêt forcé (secondes).
 defined('PVE_SHUTDOWN_TIMEOUT') || define('PVE_SHUTDOWN_TIMEOUT', 60);
+
+// ─── Réveil réseau / Wake-on-LAN (page « Réveil ») ──────────────────────
+// Appareils à allumer à distance, à définir dans config.local.php, par exemple :
+//   const WOL_DEVICES = [
+//       'nas' => ['name' => 'NAS', 'mac' => 'AA:BB:CC:DD:EE:FF', 'ip' => '192.168.1.201', 'port' => 80],
+//   ];
+// 'ip' et 'port' servent seulement à afficher si l'appareil est allumé (port qui répond quand il tourne).
+defined('WOL_DEVICES')       || define('WOL_DEVICES', []);
+// Adresse de diffusion du réseau local (ex. '192.168.1.255' pour un réseau 192.168.1.0/24).
+defined('WOL_BROADCAST')     || define('WOL_BROADCAST', '255.255.255.255');
+// Délai minimum entre deux envois vers un même appareil (secondes).
+defined('WOL_COOLDOWN')      || define('WOL_COOLDOWN', 60);
+// Temps d'attente pour savoir si un appareil est allumé (secondes).
+defined('WOL_CHECK_TIMEOUT') || define('WOL_CHECK_TIMEOUT', 1.5);

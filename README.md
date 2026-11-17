@@ -149,6 +149,23 @@ Le droit donné sur `/vms` couvre aussi les CT créés plus tard : le portail le
 
 Le CT du portail (106 par défaut, réglable avec `PVE_PROTECTED`) ne peut jamais être arrêté depuis la page.
 
+## Page « Réveil réseau » (Wake-on-LAN)
+
+Les administrateurs peuvent allumer à distance un appareil du réseau local (NAS, PC…) avec un bouton, et voir s'il est allumé. Le signal part du serveur du portail : ça marche donc depuis n'importe où, du moment que tu peux ouvrir le portail.
+
+1. Active le Wake-on-LAN sur l'appareil (ReadyNAS : Système → Alimentation → « Activation sur réseau local » ; PC : BIOS + carte réseau) et relève son adresse MAC.
+2. Dans `config.local.php` du portail :
+   ```php
+   const WOL_BROADCAST = '192.168.1.255';   // adresse de diffusion de ton réseau
+   const WOL_DEVICES = [
+       'nas' => ['name' => 'NAS', 'mac' => 'AA:BB:CC:DD:EE:FF', 'ip' => '192.168.1.201', 'port' => 80],
+   ];
+   ```
+   `ip` et `port` servent à afficher si l'appareil est allumé (un port qui répond quand il tourne : 80 pour une interface web, 22 pour SSH…).
+3. Vérifie que PHP a l'extension `sockets` : `php -m | grep sockets` (incluse dans `php8.4-common` sur Debian).
+
+Le portail doit être sur le même réseau que l'appareil (pour un CT Proxmox : carte réseau sur le pont `vmbr0`). Un même appareil ne peut être réveillé qu'une fois par minute, et chaque réveil est noté dans le journal.
+
 ## Bonus : alertes de connexion Proxmox
 
 `extras/proxmox-ntfy.sh` envoie une notification ntfy quand quelqu'un se connecte à Proxmox (interface web ou SSH), ou se trompe de mot de passe. En root sur le serveur Proxmox :

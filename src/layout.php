@@ -60,6 +60,7 @@ function page_start(string $title, array $user, string $active): void
     if ($user['is_admin']) {
         array_splice($nav, 2, 0, [
             ['/conteneurs.php', 'Conteneurs', 'server', 'conteneurs'],
+            ['/reveil.php', 'Réveil réseau', 'power', 'reveil'],
             ['/admin.php', 'Administration', 'shield', 'admin'],
         ]);
     }
