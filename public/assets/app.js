@@ -202,6 +202,55 @@
   if (installee) {
     document.querySelectorAll('[data-trust]').forEach(function (c) { c.checked = true; });
   }
+  // ── Menu « Plus » de la barre d'onglets : fermeture en touchant le fond ou avec Échap ──
+  var plus = document.querySelector('.tab-more');
+  if (plus) {
+    plus.addEventListener('click', function (e) {
+      if (e.target.hasAttribute('data-sheet-close')) { plus.open = false; }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && plus.open) { plus.open = false; }
+    });
+    window.addEventListener('pageshow', function () { plus.open = false; }); // retour arrière
+  }
+
+  // ── Tirer pour actualiser (dans l'application installée, Safari ne le fait pas) ──
+  if (installee && 'ontouchstart' in window && document.body.classList.contains('app')) {
+    var ptr = document.createElement('div');
+    ptr.className = 'ptr';
+    ptr.setAttribute('aria-hidden', 'true');
+    ptr.appendChild(document.createElement('span'));
+    document.body.appendChild(ptr);
+    var y0 = null, tire = 0, SEUIL = 75;
+    var place = function (d, anim) {
+      ptr.style.transition = anim ? 'transform .25s, opacity .25s' : 'none';
+      ptr.style.transform = 'translateY(' + (d - 60) + 'px) rotate(' + (d * 4) + 'deg)';
+      ptr.style.opacity = d > 8 ? String(Math.min(1, d / SEUIL)) : '0';
+    };
+    window.addEventListener('touchstart', function (e) {
+      y0 = (window.scrollY <= 0 && !(plus && plus.open) && e.touches.length === 1) ? e.touches[0].clientY : null;
+      tire = 0;
+    }, { passive: true });
+    window.addEventListener('touchmove', function (e) {
+      if (y0 === null) return;
+      var dy = e.touches[0].clientY - y0;
+      if (dy <= 0 || window.scrollY > 0) { y0 = null; place(0, true); return; }
+      tire = Math.min(dy * 0.5, 110);
+      place(tire, false);
+    }, { passive: true });
+    window.addEventListener('touchend', function () {
+      if (y0 === null) return;
+      y0 = null;
+      if (tire >= SEUIL) {
+        place(SEUIL, true);
+        ptr.classList.add('go');
+        location.reload();
+      } else {
+        place(0, true);
+      }
+    });
+  }
+
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('/sw.js').catch(function () {});
   }

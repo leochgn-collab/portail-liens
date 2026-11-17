@@ -679,3 +679,89 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   html, body { overscroll-behavior-y: none; }
   .search kbd { display: none; }
 }
+
+/* ───────── Interface « application » sur téléphone ───────── */
+.tabbar { display: none; }
+/* Transitions douces entre les pages : téléphone uniquement (la version ordinateur ne change pas). */
+@media (max-width: 820px) and (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .2s; }
+}
+
+@media (max-width: 820px) {
+  body { -webkit-tap-highlight-color: transparent; }
+  .app { display: block; }
+  .app .sidebar { display: none; }
+  .main { padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .topbar { margin-bottom: 20px; }
+  .topbar h1 { font-size: 32px; letter-spacing: -.02em; }
+
+  .tabbar {
+    display: flex; position: fixed; z-index: 20; left: 0; right: 0; bottom: 0;
+    padding: 6px max(6px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-right));
+    border-top: 1px solid var(--line);
+  }
+  /* Le flou est sur un calque à part : posé sur la barre elle-même, il enfermerait le menu « Plus ». */
+  .tabbar::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: rgba(9, 12, 19, .74);
+    -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  }
+  .tab {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 4px 0 2px; color: var(--faint); font-size: 10.5px; font-weight: 600; letter-spacing: .01em;
+    text-decoration: none !important; list-style: none; cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  .tab::-webkit-details-marker { display: none; }
+  .tab::marker { content: ""; }
+  .tab-ic { display: grid; place-items: center; width: 54px; height: 30px; border-radius: 99px; transition: background .2s, color .2s, transform .15s; }
+  .tab-ic .ic { width: 22px; height: 22px; }
+  .tab:active .tab-ic { transform: scale(.88); }
+  .tab-lb { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab.active, .tab-more.active > .tab, .tab-more[open] > .tab { color: var(--text); }
+  .tab.active .tab-ic, .tab-more.active > .tab .tab-ic, .tab-more[open] > .tab .tab-ic {
+    background: rgba(var(--accent-rgb), .22); color: var(--accent-2);
+  }
+  .tab-more { flex: 1; display: flex; min-width: 0; }
+  .tab-more > .tab { width: 100%; }
+
+  .sheet-backdrop { position: fixed; inset: 0; z-index: 21; background: rgba(0, 0, 0, .5); animation: fondu .2s ease-out; }
+  .sheet {
+    position: fixed; z-index: 22; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+    padding: 8px 8px 10px; border-radius: 26px;
+    background: rgba(22, 28, 40, .9); border: 1px solid var(--line-2);
+    -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 -10px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .08);
+    animation: monte-feuille .32s cubic-bezier(.2, .9, .25, 1);
+  }
+  .sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--line-2); margin: 2px auto 12px; }
+  .sheet-user { display: flex; align-items: center; gap: 12px; padding: 4px 12px 14px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .sheet-user .me-text { display: flex; }
+  .sheet-item {
+    display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; border-radius: 16px;
+    background: none; border: 0; color: var(--text); font: inherit; font-size: 15.5px; font-weight: 550; text-align: left;
+    text-decoration: none !important; cursor: pointer; touch-action: manipulation;
+  }
+  .sheet-item .ic { width: 21px; height: 21px; color: var(--accent-2); }
+  .sheet-item.active { background: rgba(var(--accent-rgb), .16); }
+  .sheet-item:active { background: var(--panel-2); }
+  .sheet-item.danger, .sheet-item.danger .ic { color: var(--bad); }
+  .sheet form { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+
+  .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
+}
+@keyframes monte-feuille { from { transform: translateY(115%); } }
+@keyframes fondu { from { opacity: 0; } }
+
+/* Tirer pour actualiser (application installée) */
+.ptr {
+  position: fixed; z-index: 30; top: calc(10px + env(safe-area-inset-top)); left: 50%;
+  width: 38px; height: 38px; margin-left: -19px; border-radius: 50%;
+  display: grid; place-items: center; pointer-events: none;
+  background: rgba(22, 28, 40, .92); border: 1px solid var(--line-2); box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  transform: translateY(-80px); opacity: 0;
+}
+.ptr span { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(var(--accent-rgb), .35); border-top-color: var(--accent-2); }
+.ptr.go span { animation: tourne .7s linear infinite; }
+@keyframes tourne { to { transform: rotate(360deg); } }

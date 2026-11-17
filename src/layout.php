@@ -42,6 +42,7 @@ function icon(string $name): string
         'copy'   => '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>',
         'server' => '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
         'power'  => '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1011.4 0"/>',
+        'more'   => '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
         'bell'   => '<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15L6 16z"/><path d="M10 20.5a2 2 0 004 0"/>',
         'archive'=> '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9"/><path d="M10 13h4"/>',
         'key'    => '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M17 6l3 3"/>',
@@ -110,6 +111,36 @@ function page_start(string $title, array $user, string $active): void
     </form>
   </div>
 </aside>
+<?php
+    // Barre d'onglets façon application (téléphone) : 4 onglets principaux, le reste dans « Plus ».
+    $tabKeys = ['dashboard' => 'Accueil', 'conteneurs' => 'Conteneurs', 'rappels' => 'Rappels', 'compte' => 'Compte'];
+    $tabs = array_values(array_filter($nav, fn ($n) => isset($tabKeys[$n[3]])));
+    $more = array_values(array_filter($nav, fn ($n) => !isset($tabKeys[$n[3]])));
+    $moreActive = in_array($active, array_column($more, 3), true);
+    ?>
+<nav class="tabbar" aria-label="Navigation">
+  <?php foreach ($tabs as [$href, $label, $ic, $key]): ?>
+    <a href="<?= e($href) ?>" class="tab<?= $key === $active ? ' active' : '' ?>"<?= $key === $active ? ' aria-current="page"' : '' ?>><span class="tab-ic"><?= icon($ic) ?></span><span class="tab-lb"><?= e($tabKeys[$key]) ?></span></a>
+  <?php endforeach; ?>
+  <details class="tab-more<?= $moreActive ? ' active' : '' ?>">
+    <summary class="tab"><span class="tab-ic"><?= icon('more') ?></span><span class="tab-lb">Plus</span></summary>
+    <div class="sheet-backdrop" data-sheet-close></div>
+    <div class="sheet">
+      <div class="sheet-grab" aria-hidden="true"></div>
+      <div class="sheet-user">
+        <span class="avatar"><?= e($initial) ?></span>
+        <span class="me-text"><strong><?= e($user['username']) ?></strong><small><?= $user['is_admin'] ? 'Administrateur' : 'Utilisateur' ?></small></span>
+      </div>
+      <?php foreach ($more as [$href, $label, $ic, $key]): ?>
+        <a href="<?= e($href) ?>" class="sheet-item<?= $key === $active ? ' active' : '' ?>"><?= icon($ic) ?><span><?= e($label) ?></span></a>
+      <?php endforeach; ?>
+      <form method="post" action="/logout.php" data-confirm="Se déconnecter ? Sur ce téléphone, il faudra refaire la double authentification.">
+        <?= csrf_field() ?>
+        <button class="sheet-item danger" type="submit"><?= icon('logout') ?><span>Se déconnecter</span></button>
+      </form>
+    </div>
+  </details>
+</nav>
 <main class="main">
 <?php
     $f = flash();
