@@ -117,6 +117,8 @@ if [ -d "$DIR/.git" ] && [ -f "$CONF" ]; then
   chmod -R u=rwX,g=rX,o= "$DIR"
   chown -R www-data:www-data "$DIR/data"
   chmod 700 "$DIR/data"
+  # Clé SSH d'extinction (page « Réveil réseau ») : ssh la refuse si elle n'est pas en 600.
+  [ -f "$DIR/data/wol_ssh_key" ] && chmod 600 "$DIR/data/wol_ssh_key"
   [ -f "$DIR/config.local.php" ] && chmod 640 "$DIR/config.local.php"
   if [ ! -e /etc/apache2/sites-enabled/portail-liens-le-ssl.conf ]; then
     ecrire_vhost "$(awk '/^[[:space:]]*ServerName/ {print $2; exit}' "$CONF")"
@@ -182,6 +184,7 @@ chown -R root:www-data "$DIR"
 chmod -R u=rwX,g=rX,o= "$DIR"
 chown -R www-data:www-data "$DIR/data"
 chmod 700 "$DIR/data"
+[ -f "$DIR/data/wol_ssh_key" ] && chmod 600 "$DIR/data/wol_ssh_key"
 chmod 640 "$DIR/config.local.php"
 
 # ─── Apache ────────────────────────────────────────────────────────────

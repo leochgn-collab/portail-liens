@@ -89,6 +89,12 @@ function wol_shutdown(array $device): ?string
     if (!wol_ssh_ready()) {
         return 'Clé SSH du portail introuvable (voir README, page « Réveil réseau »).';
     }
+    // ssh refuse une clé privée lisible par d'autres (« UNPROTECTED PRIVATE KEY FILE ») :
+    // le portail en est propriétaire, il remet donc les bons droits si besoin.
+    clearstatcache(true, WOL_SSH_KEY);
+    if ((fileperms(WOL_SSH_KEY) & 0077) !== 0) {
+        @chmod(WOL_SSH_KEY, 0600);
+    }
     // Tableau d'arguments : aucun shell n'est utilisé, rien ne peut être injecté.
     $cmd = [
         'ssh', '-i', WOL_SSH_KEY,
@@ -113,7 +119,15 @@ function wol_shutdown(array $device): ?string
     // 255 = erreur de connexion SSH. Un autre code peut venir de la coupure pendant l'extinction : c'est normal.
     // « Connection closed by… » : l'appareil s'est coupé pendant la réponse, donc l'ordre est passé.
     if ($code === 255 && !preg_match('/closed by|connection reset|broken pipe/i', $err)) {
-        $ligne = $err !== '' ? strtok($err, "\n") : 'connexion refusée';
+        // Première ligne utile (ssh encadre certains avertissements de lignes « @@@@ »).
+        $ligne = 'connexion refusée';
+        foreach (preg_split('/\R/', $err) ?: [] as $l) {
+            $l = trim($l, " @\t");
+            if ($l !== '') {
+                $ligne = $l;
+                break;
+            }
+        }
         return 'Connexion SSH impossible : ' . $ligne;
     }
     return null;
