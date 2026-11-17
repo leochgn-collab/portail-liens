@@ -84,3 +84,7 @@ defined('WOL_BROADCAST')     || define('WOL_BROADCAST', '255.255.255.255');
 defined('WOL_COOLDOWN')      || define('WOL_COOLDOWN', 60);
 // Temps d'attente pour savoir si un appareil est allumé (secondes).
 defined('WOL_CHECK_TIMEOUT') || define('WOL_CHECK_TIMEOUT', 1.5);
+// Extinction à distance : ajoute 'ssh' => 'root@192.168.1.201' à l'appareil dans WOL_DEVICES.
+// Clé SSH dédiée du portail (créée par la commande du README), rangée dans data/ hors du site.
+defined('WOL_SSH_KEY')         || define('WOL_SSH_KEY', dirname(__DIR__) . '/data/wol_ssh_key');
+defined('WOL_SSH_KNOWN_HOSTS') || define('WOL_SSH_KNOWN_HOSTS', dirname(__DIR__) . '/data/wol_known_hosts');

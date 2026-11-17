@@ -166,6 +166,27 @@ Les administrateurs peuvent allumer à distance un appareil du réseau local (NA
 
 Le portail doit être sur le même réseau que l'appareil (pour un CT Proxmox : carte réseau sur le pont `vmbr0`). Un même appareil ne peut être réveillé qu'une fois par minute, et chaque réveil est noté dans le journal.
 
+### Bouton « Éteindre » (facultatif)
+
+Le portail éteint l'appareil par SSH avec **sa propre clé**, que l'appareil n'accepte **que pour s'éteindre** : même si quelqu'un volait cette clé, il ne pourrait rien faire d'autre. L'appareil doit être allumé, avec SSH activé (ReadyNAS : Système → Paramètres → Services → SSH).
+
+1. Dans le serveur du portail (en root), crée la clé :
+   ```bash
+   apt install -y openssh-client
+   runuser -u www-data -- ssh-keygen -t ed25519 -N '' -C portail-extinction -f /var/www/portail-liens/data/wol_ssh_key
+   ```
+2. Autorise-la sur l'appareil, limitée à la commande `poweroff` (mot de passe root de l'appareil demandé une fois ; sur un ReadyNAS, c'est celui du compte admin) :
+   ```bash
+   cat /var/www/portail-liens/data/wol_ssh_key.pub | ssh root@192.168.1.201 \
+     'mkdir -p ~/.ssh && chmod 700 ~/.ssh && sed "s/^/command=\"poweroff\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty /" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+   ```
+3. Ajoute `'ssh' => 'root@192.168.1.201'` à l'appareil dans `WOL_DEVICES` :
+   ```php
+   'nas' => ['name' => 'NAS', 'mac' => 'AA:BB:CC:DD:EE:FF', 'ip' => '192.168.1.201', 'port' => 80, 'ssh' => 'root@192.168.1.201'],
+   ```
+
+Le bouton rouge « Éteindre » apparaît quand l'appareil est allumé, avec une confirmation. Chaque extinction est notée dans le journal.
+
 ## Bonus : alertes de connexion Proxmox
 
 `extras/proxmox-ntfy.sh` envoie une notification ntfy quand quelqu'un se connecte à Proxmox (interface web ou SSH), ou se trompe de mot de passe. En root sur le serveur Proxmox :

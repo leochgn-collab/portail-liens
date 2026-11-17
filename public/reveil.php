@@ -8,10 +8,24 @@ $devices = wol_devices();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
-    $key = (string) ($_POST['device'] ?? '');
-    $msg = null;
+    $key    = (string) ($_POST['device'] ?? '');
+    $action = (string) ($_POST['action'] ?? 'wake');
+    $msg    = null;
     if (!isset($devices[$key])) {
         $msg = 'Appareil inconnu.';
+    } elseif ($action === 'shutdown') {
+        $d = $devices[$key];
+        if (wol_online($d) === false) {
+            $msg = "« {$d['name']} » est déjà éteint.";
+        } else {
+            $err = wol_shutdown($d);
+            if ($err === null) {
+                log_event((int) $me['id'], "Extinction à distance : {$d['name']}");
+                $msg = "Extinction demandée pour « {$d['name']} ». Il sera coupé d'ici 1 à 2 minutes.";
+            } else {
+                $msg = $err;
+            }
+        }
     } else {
         $d    = $devices[$key];
         $last = (int) ($_SESSION['wol_last'][$key] ?? 0);
@@ -97,14 +111,19 @@ page_start('Réveil réseau', $me, 'reveil');
         <?= csrf_field() ?><input type="hidden" name="device" value="<?= e($key) ?>">
         <button class="btn btn-primary btn-sm" type="submit"><?= icon('power') ?> Allumer</button>
       </form>
+      <?php elseif ($d['ssh'] !== ''): ?>
+      <form method="post" data-confirm="Éteindre « <?= e($d['name']) ?> » ? Si une sauvegarde est en cours dessus, elle sera interrompue.">
+        <?= csrf_field() ?><input type="hidden" name="device" value="<?= e($key) ?>"><input type="hidden" name="action" value="shutdown">
+        <button class="btn btn-danger btn-sm" type="submit"><?= icon('power') ?> Éteindre</button>
+      </form>
       <?php else: ?>
-      <span class="muted small">Déjà allumé.</span>
+      <span class="muted small">Allumé (extinction à distance non configurée).</span>
       <?php endif; ?>
       <a class="btn btn-ghost btn-sm" href="/reveil.php">Actualiser</a>
     </div>
   </article>
 <?php endforeach; ?>
 </div>
-<p class="muted small">Le signal ne part que sur le réseau local du portail : l'appareil doit avoir le Wake-on-LAN activé et être branché en câble. Un même appareil ne peut être réveillé qu'une fois par minute.</p>
+<p class="muted small">Le signal ne part que sur le réseau local du portail : l'appareil doit avoir le Wake-on-LAN activé et être branché en câble. Un même appareil ne peut être réveillé qu'une fois par minute. L'extinction passe par SSH avec une clé du portail limitée à cette seule commande.</p>
 <?php endif; ?>
 <?php page_end();
