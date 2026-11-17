@@ -149,6 +149,23 @@ Le droit donné sur `/vms` couvre aussi les CT créés plus tard : le portail le
 
 Le CT du portail (106 par défaut, réglable avec `PVE_PROTECTED`) ne peut jamais être arrêté depuis la page.
 
+## Page « Sauvegardes » (Proxmox)
+
+Les administrateurs suivent les sauvegardes Proxmox (vzdump) depuis le portail :
+
+- **prochaine sauvegarde** (date et compte à rebours), **dernière** (réussie ou non, durée), état du **stockage** (joignable, place libre) ;
+- **sauvegarde en cours** : barre d'avancement, CT par CT (terminé avec durée et taille, en cours, en attente, en échec), temps écoulé, **temps restant estimé** et heure de fin prévue (d'après les durées des sauvegardes précédentes). La page se recharge toute seule toutes les 15 s pendant une sauvegarde ;
+- **tâches planifiées**, **copies présentes** sur le stockage (nombre, dernière copie, taille) et **historique** des 15 dernières sauvegardes.
+
+La page lit seulement. Elle utilise le même jeton que la page Conteneurs, qui a besoin en plus d'un rôle de lecture. Sur l'hôte Proxmox :
+
+```bash
+pveum role add PortailAudit -privs "Sys.Audit Datastore.Audit"
+pveum acl modify / --tokens 'root@pam!portail' --roles PortailAudit --propagate 1
+```
+
+`Sys.Audit` permet de lire les tâches planifiées et le journal des sauvegardes, `Datastore.Audit` la liste des copies sur le stockage. Aucun de ces droits ne permet de modifier quoi que ce soit.
+
 ## Page « Réveil réseau » (Wake-on-LAN)
 
 Les administrateurs peuvent allumer à distance un appareil du réseau local (NAS, PC…) avec un bouton, et voir s'il est allumé. Le signal part du serveur du portail : ça marche donc depuis n'importe où, du moment que tu peux ouvrir le portail.

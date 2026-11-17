@@ -193,4 +193,16 @@
     load();
     setInterval(load, 120000);
   }
+
+  // ── Rechargement automatique (page Sauvegardes pendant une sauvegarde) ──
+  var auto = document.querySelector('[data-autorefresh]');
+  if (auto) {
+    var sec = parseInt(auto.getAttribute('data-autorefresh'), 10) || 15;
+    setTimeout(function () {
+      // Pas de rechargement si l'utilisateur est en train de saisir quelque chose.
+      var a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      location.reload();
+    }, sec * 1000);
+  }
 })();
