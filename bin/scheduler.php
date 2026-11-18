@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// Planificateur des plages horaires des CT et VM, et détection des nouveaux. Lancé chaque minute par cron, en www-data :
+// Planificateur des plages horaires des CT et détection des nouveaux CT. Lancé chaque minute par cron, en www-data :
 //   * * * * * www-data php /var/www/portail-liens/bin/scheduler.php
 // Il n'agit qu'aux changements de plage (arrêt à l'heure d'extinction, démarrage à l'heure
 // d'allumage) : un démarrage ou un arrêt manuel entre deux reste donc respecté.
@@ -22,10 +22,8 @@ if ($list['error'] !== null) {
 }
 ct_detect_changes($list['cts']);
 $status = [];
-$types = [];
 foreach ($list['cts'] as $ct) {
     $status[(int) $ct['vmid']] = (string) ($ct['status'] ?? '');
-    $types[(int) $ct['vmid']] = (string) $ct['type'];
 }
 
 $now = date('H:i');
@@ -51,16 +49,15 @@ foreach ($rows as $row) {
         continue;
     }
 
-    $kind = $types[$vmid] === 'qemu' ? 'VM' : 'CT';
-    $err = pve_action($vmid, $off ? 'shutdown' : 'start', $types[$vmid]);
+    $err = pve_action($vmid, $off ? 'shutdown' : 'start');
     if ($err === null) {
         $mark();
-        log_event(null, "$kind $vmid " . ($off ? 'arrêté' : 'démarré') . ($kind === 'VM' ? 'e' : '') . ' (plage horaire)');
-        notify("$kind $vmid", $off ? 'Arrêt programmé' : 'Démarrage programmé', 2, [$off ? 'zzz' : 'sunny']);
+        log_event(null, "CT $vmid " . ($off ? 'arrêté' : 'démarré') . ' (plage horaire)');
+        notify('CT ' . $vmid, $off ? 'Arrêt programmé' : 'Démarrage programmé', 2, [$off ? 'zzz' : 'sunny']);
     } elseif (setting("ct_fail_$vmid") !== $err) {
         // Une seule ligne au journal et une seule alerte par erreur, pas une par minute.
         set_setting("ct_fail_$vmid", $err);
-        log_event(null, "$kind $vmid : échec plage horaire — $err (nouvel essai chaque minute)");
-        notify("$kind $vmid : échec de la plage horaire", $err, 4, ['warning']);
+        log_event(null, "CT $vmid : échec plage horaire — $err (nouvel essai chaque minute)");
+        notify("CT $vmid : échec de la plage horaire", $err, 4, ['warning']);
     }
 }
