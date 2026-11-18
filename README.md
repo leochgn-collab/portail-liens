@@ -139,7 +139,7 @@ L'envoi est fait chaque minute par cron (`bin/rappels.php`, dans `/etc/cron.d/po
 
 ## Page « Conteneurs » (Proxmox)
 
-Les administrateurs peuvent démarrer et arrêter proprement leurs CT Proxmox, et programmer des plages d'extinction (ex. éteint de 23:00 à 07:00), affichées sur une frise de 24 h. Le planificateur est lancé chaque minute par cron (`/etc/cron.d/portail-ct`, créé par `install.sh`).
+Les administrateurs peuvent démarrer et arrêter proprement leurs CT **et leurs VM** Proxmox (les modèles de VM sont ignorés ; pour une VM, l'arrêt propre est plus fiable avec l'agent invité QEMU), et programmer des plages d'extinction (ex. éteint de 23:00 à 07:00), affichées sur une frise de 24 h. Le planificateur est lancé chaque minute par cron (`/etc/cron.d/portail-ct`, créé par `install.sh`).
 
 1. Sur l'hôte Proxmox, crée un rôle et un jeton limités :
    ```bash

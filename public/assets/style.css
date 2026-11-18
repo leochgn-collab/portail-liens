@@ -781,3 +781,4 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .faceid-ic .ic { width: 48px; height: 48px; stroke-width: 2.2; }
 .faceid-card.wait .faceid-ic { animation: pouls-faceid 1.2s ease-in-out infinite; }
 @keyframes pouls-faceid { 50% { transform: scale(.94); opacity: .8; } }
+.ct-ic-vm { background: linear-gradient(140deg, rgba(var(--glow-rgb), .32), rgba(var(--accent-rgb), .14)); border-color: rgba(var(--glow-rgb), .35); color: #d8c9ff; }

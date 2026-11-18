@@ -69,33 +69,64 @@ function pve_request(string $method, string $path, array $data = []): array
     return ['ok' => true, 'data' => $json['data'] ?? null, 'error' => null];
 }
 
-/** Liste des CT du nœud, triés par identifiant. @return array{cts:array,error:?string} */
-function pve_list_cts(): array
+/** « CT » ou « VM » selon le type Proxmox (lxc / qemu). */
+function guest_kind(array $g): string
 {
-    $r = pve_request('GET', '/nodes/' . rawurlencode(PVE_NODE) . '/lxc');
-    if (!$r['ok']) {
-        return ['cts' => [], 'error' => $r['error']];
-    }
-    $cts = is_array($r['data']) ? $r['data'] : [];
-    usort($cts, fn ($a, $b) => (int) $a['vmid'] <=> (int) $b['vmid']);
-    return ['cts' => $cts, 'error' => null];
+    return ($g['type'] ?? 'lxc') === 'qemu' ? 'VM' : 'CT';
 }
 
 /**
- * Action : start | shutdown | stop. Renvoie un message d'erreur ou null.
- * « shutdown » est un arrêt propre ; Proxmox force l'arrêt seulement si le CT
- * ne s'est pas éteint au bout de PVE_SHUTDOWN_TIMEOUT secondes.
+ * Conteneurs (LXC) et machines virtuelles (QEMU) du nœud, triés par identifiant.
+ * Chaque élément reçoit 'type' => 'lxc' | 'qemu'. Les modèles de VM (templates) sont ignorés.
+ * @return array{cts:array,error:?string}
  */
-function pve_action(int $vmid, string $action): ?string
+function pve_list_cts(): array
 {
-    if (!in_array($action, ['start', 'shutdown', 'stop'], true)) {
+    $tous = [];
+    foreach (['lxc', 'qemu'] as $type) {
+        $r = pve_request('GET', '/nodes/' . rawurlencode(PVE_NODE) . '/' . $type);
+        if (!$r['ok']) {
+            return ['cts' => [], 'error' => $r['error']];
+        }
+        foreach (is_array($r['data']) ? $r['data'] : [] as $g) {
+            if (!empty($g['template'])) {
+                continue;
+            }
+            $g['type'] = $type;
+            $tous[] = $g;
+        }
+    }
+    usort($tous, fn ($a, $b) => (int) $a['vmid'] <=> (int) $b['vmid']);
+    return ['cts' => $tous, 'error' => null];
+}
+
+/** Retrouve un CT ou une VM par identifiant dans une liste, ou null. */
+function pve_find(array $list, int $vmid): ?array
+{
+    foreach ($list as $g) {
+        if ((int) $g['vmid'] === $vmid) {
+            return $g;
+        }
+    }
+    return null;
+}
+
+/**
+ * Action : start | shutdown | stop, sur un CT (lxc) ou une VM (qemu). Renvoie un message d'erreur ou null.
+ * « shutdown » est un arrêt propre (pour une VM : signal d'extinction ACPI ou agent invité) ;
+ * Proxmox force l'arrêt seulement si la machine ne s'est pas éteinte au bout de PVE_SHUTDOWN_TIMEOUT secondes.
+ */
+function pve_action(int $vmid, string $action, string $type = 'lxc'): ?string
+{
+    if (!in_array($action, ['start', 'shutdown', 'stop'], true) || !in_array($type, ['lxc', 'qemu'], true)) {
         return 'Action inconnue.';
     }
+    $kind = $type === 'qemu' ? 'VM' : 'CT';
     if ($action !== 'start' && in_array($vmid, PVE_PROTECTED, true)) {
-        return "Le CT $vmid est protégé : le portail ne peut pas l'arrêter.";
+        return "$kind $vmid est protégé : le portail ne peut pas l'arrêter.";
     }
     $data = $action === 'shutdown' ? ['timeout' => PVE_SHUTDOWN_TIMEOUT, 'forceStop' => 1] : [];
-    $r = pve_request('POST', '/nodes/' . rawurlencode(PVE_NODE) . "/lxc/$vmid/status/$action", $data);
+    $r = pve_request('POST', '/nodes/' . rawurlencode(PVE_NODE) . "/$type/$vmid/status/$action", $data);
     return $r['ok'] ? null : $r['error'];
 }
 
@@ -153,6 +184,7 @@ function ct_detect_changes(array $cts): array
         $known[(int) $r['vmid']] = (string) $r['name'];
     }
     $first = !$known && setting('ct_known_init') !== '1';
+    $vmInit = setting('ct_known_vm_init') !== '1'; // 1er passage depuis l'ajout des VM : pas d'alerte pour celles qui existent
     $now = time();
     $seen = [];
     $new = [];
@@ -161,10 +193,11 @@ function ct_detect_changes(array $cts): array
         $name = (string) ($ct['name'] ?? '');
         $seen[$id] = true;
         if (!isset($known[$id])) {
+            $silent = $first || ($vmInit && ($ct['type'] ?? 'lxc') === 'qemu');
             $pdo->prepare('INSERT INTO ct_known (vmid, name, first_seen) VALUES (?, ?, ?)')
-                ->execute([$id, $name, $first ? 0 : $now]);
-            if (!$first) {
-                $new[$id] = $name;
+                ->execute([$id, $name, $silent ? 0 : $now]);
+            if (!$silent) {
+                $new[$id] = [$name, guest_kind($ct)];
             }
         } elseif ($known[$id] !== $name) {
             $pdo->prepare('UPDATE ct_known SET name = ? WHERE vmid = ?')->execute([$name, $id]);
@@ -179,13 +212,17 @@ function ct_detect_changes(array $cts): array
     if ($first) {
         set_setting('ct_known_init', '1');
     }
-    foreach ($new as $id => $name) {
-        log_event(null, "Nouveau conteneur détecté : CT $id « $name »");
-        notify("Nouveau conteneur : CT $id", "« $name » vient d'apparaître dans Proxmox. Il est ajouté à la page Conteneurs du portail.", 3, ['new']);
+    if ($vmInit) {
+        set_setting('ct_known_vm_init', '1');
+    }
+    foreach ($new as $id => [$name, $kind]) {
+        $quoi = $kind === 'VM' ? 'Nouvelle machine virtuelle' : 'Nouveau conteneur';
+        log_event(null, "$quoi détecté(e) : $kind $id « $name »");
+        notify("$quoi : $kind $id", "« $name » vient d'apparaître dans Proxmox. Il est ajouté à la page Conteneurs du portail.", 3, ['new']);
     }
     foreach ($gone as $id => $name) {
-        log_event(null, "Conteneur disparu : CT $id « $name »");
-        notify("Conteneur supprimé : CT $id", "« $name » n'existe plus dans Proxmox (ou le portail n'a plus le droit de le voir).", 3, ['wastebasket']);
+        log_event(null, "Disparu de Proxmox : n°$id « $name »");
+        notify("Supprimé de Proxmox : n°$id", "« $name » n'existe plus dans Proxmox (ou le portail n'a plus le droit de le voir).", 3, ['wastebasket']);
     }
     return ['new' => $new, 'gone' => $gone];
 }
