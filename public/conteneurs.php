@@ -7,7 +7,9 @@ $me = require_admin();
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     require_post_csrf();
     $action = (string) ($_POST['action'] ?? '');
-    $vmid   = (int) ($_POST['vmid'] ?? 0);
+    $brut   = (string) ($_POST['vmid'] ?? '');
+    // Identifiant strictement numérique : « 100/../x » ou « 100 OR 1=1 » sont refusés, pas convertis en 100.
+    $vmid   = preg_match('/^[1-9][0-9]{2,8}$/', $brut) ? (int) $brut : 0;
     $err    = null;
     $ok     = null;
     // Le type (CT ou VM) vient de Proxmox, jamais du formulaire.
