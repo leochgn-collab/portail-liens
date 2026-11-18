@@ -31,6 +31,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         if ($t !== '' && !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $t)) {
             $msg = 'Sujet ntfy invalide : lettres, chiffres, - et _ uniquement (64 caractères au maximum).';
+        } elseif (!rappel_topic_allowed($me, $t)) {
+            $msg = 'Ce sujet est réservé aux alertes de sécurité du portail : choisis-en un autre.';
         } elseif ($qa !== '' && (!preg_match($hm, $qa) || !preg_match($hm, $qb) || $qa === $qb)) {
             $msg = 'Heures de silence invalides (début différent de la fin).';
         } else {
@@ -48,7 +50,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if (in_array($action, ['create', 'update'], true)) {
         [$data, $err] = rappel_from_post($_POST);
-        $count = (int) db()->query('SELECT COUNT(*) FROM reminders WHERE user_id = ' . $uid)->fetchColumn();
+        if ($err === null && !rappel_topic_allowed($me, (string) $data['topic'])) {
+            $err = 'Ce sujet est réservé aux alertes de sécurité du portail : choisis-en un autre.';
+        }
+        $cnt = db()->prepare('SELECT COUNT(*) FROM reminders WHERE user_id = ?');
+        $cnt->execute([$uid]);
+        $count = (int) $cnt->fetchColumn();
         if ($err === null && $action === 'create' && $count >= RAPPEL_MAX_PAR_COMPTE) {
             $err = 'Nombre maximum de rappels atteint (' . RAPPEL_MAX_PAR_COMPTE . ').';
         }

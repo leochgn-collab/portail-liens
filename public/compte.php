@@ -62,6 +62,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             db()->prepare('UPDATE users SET password_hash = ?, must_change_pwd = 0, pwd_version = pwd_version + 1 WHERE id = ?')
                 ->execute([password_hash($new, password_algo()), $user['id']]);
             log_event((int) $user['id'], 'Mot de passe modifié');
+            notify("Mot de passe modifié pour « {$user['username']} »", 'Les autres sessions et tous les appareils de confiance ont été déconnectés. Si ce n\'est pas toi, préviens un administrateur.', 4, ['key']);
             // Les autres sessions sont déconnectées ; on garde celle-ci.
             $_SESSION['pwd_version'] = (int) $user['pwd_version'] + 1;
             session_regenerate_id(true);
@@ -84,6 +85,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } else {
             db()->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$email, $user['id']]);
             log_event((int) $user['id'], $email === '' ? 'Adresse e-mail retirée' : 'Adresse e-mail modifiée');
+            // L'adresse sert à réinitialiser le mot de passe : tout changement est signalé.
+            notify("Adresse e-mail modifiée pour « {$user['username']} »", $email === '' ? 'L\'adresse a été retirée.' : 'Nouvelle adresse enregistrée pour « mot de passe oublié ».', 4, ['envelope']);
             if ($email !== '' && mail_configured()) {
                 $err = send_mail($email, 'Adresse enregistrée · ' . APP_NAME,
                     "Bonjour {$user['username']},\n\nCette adresse est maintenant celle de ton compte sur " . APP_NAME . ".\n"

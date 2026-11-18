@@ -279,6 +279,15 @@ function rappel_from_post(array $p): array
     return [$data, null];
 }
 
+/**
+ * Un compte non administrateur ne peut pas envoyer ses rappels sur le sujet des alertes de sécurité :
+ * il pourrait sinon y glisser de fausses alertes (« Connexion réussie »…) pour noyer les vraies.
+ */
+function rappel_topic_allowed(array $user, string $topic): bool
+{
+    return $topic === '' || $user['is_admin'] || strcasecmp($topic, setting('ntfy_topic')) !== 0;
+}
+
 /** Adresse publique du portail (pour les boutons des notifications), ou '' si inconnue. */
 function portal_url(): string
 {
