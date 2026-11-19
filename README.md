@@ -218,6 +218,10 @@ Le portail éteint l'appareil par SSH avec **sa propre clé**, que l'appareil n'
 
 Le bouton rouge « Éteindre » apparaît quand l'appareil est allumé, avec une confirmation. Chaque extinction est notée dans le journal.
 
+## Page « Certificats »
+
+Surveille la date d'expiration et la validité des certificats HTTPS de tes sous-domaines (contrôle toutes les heures par cron, `bin/certificats.php`). La connexion passe par le reverse proxy indiqué dans `TRUSTED_PROXIES` (ou `CERT_CONNECT`), avec le nom du site (SNI) : le portail voit exactement le certificat reçu par les visiteurs. Alertes à 14, 7, 3, 1 et 0 jour(s), si un certificat est refusé ou injoignable deux fois de suite, et quand il est renouvelé après une alerte. Les alertes partent par e-mail à l'adresse réglée sur la page (réglages SMTP requis), sinon — ou si l'envoi échoue — sur ntfy.
+
 ## Bonus : alertes de connexion Proxmox
 
 `extras/proxmox-ntfy.sh` envoie une notification ntfy quand quelqu'un se connecte à Proxmox (interface web ou SSH), ou se trompe de mot de passe. En root sur le serveur Proxmox :

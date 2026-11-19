@@ -94,7 +94,8 @@ EOF
 # et envoi des rappels (page « Rappels »).
 installer_cron() {
   printf '%s\n' "* * * * * www-data php $DIR/bin/scheduler.php" \
-    "* * * * * www-data php $DIR/bin/rappels.php" > /etc/cron.d/portail-ct
+    "* * * * * www-data php $DIR/bin/rappels.php" \
+    "17 * * * * www-data php $DIR/bin/certificats.php" > /etc/cron.d/portail-ct
   chmod 644 /etc/cron.d/portail-ct
 }
 

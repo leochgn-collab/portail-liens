@@ -92,3 +92,12 @@ defined('WOL_CHECK_TIMEOUT') || define('WOL_CHECK_TIMEOUT', 1.5);
 // Clé SSH dédiée du portail (créée par la commande du README), rangée dans data/ hors du site.
 defined('WOL_SSH_KEY')         || define('WOL_SSH_KEY', dirname(__DIR__) . '/data/wol_ssh_key');
 defined('WOL_SSH_KNOWN_HOSTS') || define('WOL_SSH_KNOWN_HOSTS', dirname(__DIR__) . '/data/wol_known_hosts');
+
+// ─── Certificats HTTPS (page « Certificats ») ─────────────────────────────
+// Adresse à joindre pour lire les certificats (vide = le reverse proxy de TRUSTED_PROXIES, sinon le DNS).
+defined('CERT_CONNECT')   || define('CERT_CONNECT', '');
+// Fichier d'autorités pour la vérification (vide = celles du système).
+defined('CERT_CAFILE')    || define('CERT_CAFILE', '');
+defined('CERT_TIMEOUT')   || define('CERT_TIMEOUT', 6);
+// Alerte quand il reste ce nombre de jours (Let's Encrypt renouvelle normalement à 30 jours).
+defined('CERT_WARN_DAYS') || define('CERT_WARN_DAYS', 14);
