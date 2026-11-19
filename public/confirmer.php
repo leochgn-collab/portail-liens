@@ -33,7 +33,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
     login_failed('2fa', $key, $user, 'Code 2FA incorrect (confirmation d\'une action d\'administration)');
     stop_if_banned();
-    $error = 'Code incorrect ou expiré.';
+    $error = $secret ? totp_error_message($secret, (string) ($_POST['code'] ?? ''), (int) $user['totp_last_step']) : 'Code incorrect.';
 }
 
 auth_start('Confirmer');

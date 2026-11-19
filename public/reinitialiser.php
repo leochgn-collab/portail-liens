@@ -67,7 +67,7 @@ if (!$user['totp_enabled']) {
 
         if ($step === null && !$viaRecovery) {
             login_failed('reset-code', $key, $user, 'Réinitialisation : code 2FA incorrect');
-            $error = 'Code incorrect ou expiré.';
+            $error = isset($secret) && $secret ? totp_error_message($secret, $digits, (int) $user['totp_last_step']) : 'Code incorrect ou expiré.';
         } else {
             $pdo = db();
             $pdo->beginTransaction();

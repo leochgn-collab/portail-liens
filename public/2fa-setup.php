@@ -36,9 +36,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($step === null) {
         login_failed('2fa', $key, $user, 'Code incorrect pendant l\'activation de la 2FA');
         stop_if_banned();
-        $error = 'Code incorrect. Utilise l\'entrée « ' . APP_NAME . ' » la plus récente de ton application '
-            . '(supprime les anciennes), vérifie que l\'heure du téléphone est automatique, puis réessaie. '
-            . 'Heure du serveur : ' . date('H:i:s') . '.';
+        $error = totp_error_message($secret, (string) ($_POST['code'] ?? ''));
     } else {
         db()->prepare('UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_last_step = ? WHERE id = ?')
             ->execute([encrypt_secret($secret), $step, $user['id']]);

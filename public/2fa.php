@@ -58,7 +58,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     login_failed('2fa', $key, $user, $useRecovery ? 'Code de secours incorrect' : 'Code 2FA incorrect');
     stop_if_banned();
-    $error = $useRecovery ? 'Code de secours invalide ou déjà utilisé.' : 'Code incorrect ou expiré.';
+    $error = $useRecovery
+        ? 'Code de secours invalide ou déjà utilisé.'
+        : (($sec = decrypt_secret($user['totp_secret'])) ? totp_error_message($sec, (string) ($_POST['code'] ?? ''), (int) $user['totp_last_step']) : 'Code incorrect.');
 }
 
 auth_start('Vérification');

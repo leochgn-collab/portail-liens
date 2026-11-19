@@ -34,6 +34,31 @@
     });
   });
 
+  // ── Pages de connexion : un seul envoi par formulaire ──
+  // Si la page est lente, un 2e appui sur « Valider » renverrait le même code, déjà utilisé :
+  // il serait alors refusé (« code incorrect ») alors que la connexion venait de réussir.
+  document.querySelectorAll('.auth form').forEach(function (f) {
+    f.addEventListener('submit', function (ev) {
+      if (f.dataset.envoi === '1') { ev.preventDefault(); return; }
+      f.dataset.envoi = '1';
+      setTimeout(function () { // après l'envoi, sinon la valeur du bouton cliqué serait perdue
+        f.querySelectorAll('button[type=submit], button:not([type])').forEach(function (b) {
+          b.disabled = true;
+          b.dataset.label = b.textContent;
+          b.textContent = 'Vérification…';
+        });
+      }, 0);
+    });
+  });
+  // Retour arrière : la page peut revenir du cache avec les boutons bloqués.
+  window.addEventListener('pageshow', function () {
+    document.querySelectorAll('.auth form[data-envoi="1"]').forEach(function (f) {
+      f.dataset.envoi = '';
+      f.querySelectorAll('button[disabled]').forEach(function (b) { b.disabled = false; if (b.dataset.label) b.textContent = b.dataset.label; });
+    });
+    document.querySelectorAll('input.otp').forEach(function (i) { if (i.form) i.form.dataset.sent = ''; });
+  });
+
   // ── Confirmation avant suppression ──
   document.querySelectorAll('form[data-confirm]').forEach(function (f) {
     f.addEventListener('submit', function (ev) {

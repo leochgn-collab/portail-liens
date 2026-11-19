@@ -71,6 +71,48 @@ function totp_verify(string $secretB32, string $code, int $lastStep = 0): ?int
     return null;
 }
 
+/**
+ * Explique pourquoi un code a été refusé, pour afficher un message utile :
+ *  - 'used'  : bon code, mais déjà utilisé (un code ne sert qu'une fois) ;
+ *  - 'drift' : correspond à une autre heure → horloge du téléphone décalée ;
+ *  - 'other' : aucun rapport (mauvaise entrée dans l'application, faute de frappe).
+ * @return array{0:string,1:int} [raison, secondes (attente avant le prochain code, ou décalage)]
+ */
+function totp_diagnose(string $secretB32, string $code, int $lastStep = 0): array
+{
+    $code = preg_replace('/\D/', '', $code);
+    if (strlen($code) !== 6) {
+        return ['other', 0];
+    }
+    $now = intdiv(time(), 30);
+    foreach ([0, -1, 1] as $d) {
+        if ($now + $d <= $lastStep && hash_equals(totp_code($secretB32, $now + $d), $code)) {
+            return ['used', 30 - time() % 30];
+        }
+    }
+    for ($d = 2; $d <= 20; $d++) { // jusqu'à 10 minutes d'écart
+        foreach ([$d, -$d] as $x) {
+            if (hash_equals(totp_code($secretB32, $now + $x), $code)) {
+                return ['drift', $x * 30];
+            }
+        }
+    }
+    return ['other', 0];
+}
+
+/** Message à afficher pour un code refusé. */
+function totp_error_message(string $secretB32, string $code, int $lastStep = 0): string
+{
+    [$why, $n] = totp_diagnose($secretB32, $code, $lastStep);
+    return match ($why) {
+        'used'  => "Ce code vient déjà de servir : un code ne marche qu'une seule fois. Attends le code suivant (dans $n s) et saisis-le.",
+        'drift' => "Ce code correspond à une heure décalée d'environ " . max(1, (int) round(abs($n) / 60)) . ' min : '
+            . "l'heure de ton téléphone n'est pas juste. Mets « Date et heure » en automatique (Réglages → Général) puis réessaie.",
+        default => 'Code incorrect. Vérifie que tu utilises bien l\'entrée « ' . APP_NAME . ' » de ton application '
+            . "d'authentification (s'il y en a plusieurs, la plus récente, et supprime les anciennes).",
+    };
+}
+
 function totp_uri(string $secretB32, string $account): string
 {
     $issuer = rawurlencode(APP_NAME);
